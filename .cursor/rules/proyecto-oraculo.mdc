@@ -12,9 +12,10 @@ The oracle is a black box. Students call `evaluar`. Do not document or expose `_
 Keep the student path to four lines before their cell:
 
 ```
-modelo = cargar_modelo()
+modelo = cargar_modelo("pequeno")
 datos = cargar_datos()
-oraculo = Oraculo(modelo, datos)
+busqueda, validacion = dividir(datos)
+oraculo = Oraculo(modelo, busqueda)
 ```
 
 `ayudas.py` is readable. `oraculo.py` is consulted, not opened. Do not add a web app or extra frameworks.

@@ -110,6 +110,7 @@ class Oraculo:
     def __init__(self, modelo, datos, cache="cache_oraculo.json", max_new_tokens=384, lote=8):
         self.model = modelo.red
         self.tok = modelo.tok
+        self.nombre_modelo = getattr(modelo, "nombre", "desconocido")
         self.datos = datos
         self.max_new_tokens = max_new_tokens
         self.lote = lote
@@ -120,18 +121,12 @@ class Oraculo:
 
         # Si el modelo tiene modo pensamiento (Qwen3), lo apagamos: multiplica
         # los tokens por 5-10 y tapa el efecto de la ranura de estrategia.
+        # Se mira la plantilla: kwargs extra no lanzan TypeError en Mistral.
+        plantilla = self.tok.chat_template or ""
         self._extra = {}
-        try:
-            self.tok.apply_chat_template(
-                [{"role": "user", "content": "x"}],
-                add_generation_prompt=True,
-                tokenize=False,
-                enable_thinking=False,
-            )
+        if "enable_thinking" in plantilla:
             self._extra = {"enable_thinking": False}
             print("modo pensamiento: apagado")
-        except TypeError:
-            pass
 
         self.ruta_cache = cache
         self.cache = {}
@@ -147,7 +142,7 @@ class Oraculo:
             instancias = self.datos
 
         k = _id_config(config)
-        claves = [f"{k}|{x['id']}|{semilla}" for x in instancias]
+        claves = [f"{self.nombre_modelo}|{k}|{x['id']}|{semilla}" for x in instancias]
         faltan = [(c, x) for c, x in zip(claves, instancias) if c not in self.cache]
 
         if faltan:
