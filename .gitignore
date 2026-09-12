@@ -1,0 +1,11 @@
+profesor/
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+cache.json
+cache_oraculo.json
+oraculo_cache.json
+entrega.json
+.env
+*.egg-info/

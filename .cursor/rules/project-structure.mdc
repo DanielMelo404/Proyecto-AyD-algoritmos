@@ -1,0 +1,23 @@
+---
+description: What is public for students vs local to the professor
+alwaysApply: true
+---
+
+# Project structure
+
+```
+Proyecto-AyD-algoritmos/
+├── proyecto_oraculo.ipynb     # lo abren en Colab
+├── oraculo.py                 # caja negra
+├── ayudas.py                  # lo que el estudiante sí puede leer
+├── datos_visibles.json        # 300 instancias
+├── README.md
+├── profesor/                  # gitignored, no se publica
+│   ├── prepara_datos.py
+│   └── datos_ocultos.json
+└── .cursor/rules/
+```
+
+Public: notebook, `oraculo.py`, `ayudas.py`, `datos_visibles.json`, README.
+
+Never commit `profesor/`, `datos_ocultos.json`, caches, or `entrega.json`.

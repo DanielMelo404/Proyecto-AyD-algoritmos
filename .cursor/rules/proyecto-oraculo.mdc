@@ -1,0 +1,20 @@
+---
+description: Domain rules for the Oráculo course project
+alwaysApply: true
+---
+
+# Proyecto Oráculo
+
+The oracle is a black box. Students call `evaluar`. Do not document or expose `_generar`, `_verificar`, or the cache format in the notebook.
+
+`oraculo.gastado` is the scarce resource. `r.trazas` is free and unlimited.
+
+Keep the student path to four lines before their cell:
+
+```
+modelo = cargar_modelo()
+datos = cargar_datos()
+oraculo = Oraculo(modelo, datos)
+```
+
+`ayudas.py` is readable. `oraculo.py` is consulted, not opened. Do not add a web app or extra frameworks.

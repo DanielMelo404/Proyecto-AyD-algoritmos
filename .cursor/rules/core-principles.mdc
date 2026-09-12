@@ -1,0 +1,16 @@
+---
+description: File size, Python style, and code-quality standards
+alwaysApply: true
+---
+
+# Core principles
+
+**CRITICAL:** Never create files over **500 lines**. Refactor before 400. One responsibility per file.
+
+- **DRY:** extract repeats; constants for magic values
+- **KISS:** readable over clever
+- **SRP:** one reason to change per module
+
+Python 3.11+. Type hints on public functions. PEP 8. snake_case files and functions. PascalCase classes. UPPER_SNAKE_CASE constants.
+
+Stdlib first. Comment why, not what.
