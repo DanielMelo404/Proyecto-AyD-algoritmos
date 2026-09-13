@@ -1,7 +1,7 @@
 """
 ayudas.py — funciones que el estudiante sí puede leer.
 
-    from ayudas import cargar_modelo, cargar_datos, dividir, validar, ver_prompt, curva, entrega
+    from ayudas import cargar_modelo, cargar_datos, dividir, ver_prompt, curva, entrega
 
     modelo = cargar_modelo("pequeno")
     datos = cargar_datos()
@@ -9,7 +9,6 @@ ayudas.py — funciones que el estudiante sí puede leer.
 """
 
 import json
-from collections import Counter
 
 from oraculo import armar
 
@@ -73,11 +72,17 @@ def cargar_modelo(modelo="pequeno"):
     import torch
     from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "No hay GPU. En Colab: Entorno de ejecución ▸ Cambiar tipo de "
+            "entorno de ejecución ▸ T4 GPU. Luego reinicia y corre desde la celda 1."
+        )
+
     nombre = _resolver_modelo(modelo)
     print(f"cargando {modelo} → {nombre}")
     tok = AutoTokenizer.from_pretrained(nombre, token=False)
     cfg = AutoConfig.from_pretrained(nombre, token=False)
-    kwargs = {"device_map": {"": 0}, "config": cfg, "token": False}
+    kwargs = {"device_map": {"": "cuda:0"}, "config": cfg, "token": False}
     if not _parchear_compute_dtype(cfg):
         kwargs["dtype"] = torch.float16
     red = AutoModelForCausalLM.from_pretrained(nombre, **kwargs)
@@ -103,37 +108,6 @@ def dividir(datos):
         f"validación: {len(validacion)} inst, {len({x['familia'] for x in validacion})} familias"
     )
     return busqueda, validacion
-
-
-def validar(oraculo, config, datos, semilla=1, n=None):
-    """Precisión en las familias reservadas. No gasta presupuesto.
-
-    `n` limita cuántas instancias medir (útil con 7-8B). Por defecto, todas.
-    """
-    conjunto = [x for x in datos if x["familia"] in FAMILIAS_VALIDACION]
-    if not conjunto:
-        raise ValueError(
-            "ninguna instancia de validación: pase `datos` o el segundo valor de `dividir`"
-        )
-    if n is not None:
-        conjunto = conjunto[:n]
-
-    gastado = oraculo.gastado
-    r = oraculo.evaluar(config, conjunto, semilla=semilla)
-    oraculo.gastado = gastado
-
-    ids_fallo = {t["id"] for t in r.trazas}
-    por = Counter()
-    tot = Counter()
-    for x in conjunto:
-        tot[x["familia"]] += 1
-        if x["id"] not in ids_fallo:
-            por[x["familia"]] += 1
-
-    print(f"validación: {r.precision:.1%}  ({r.n} inst, no gasta presupuesto)")
-    for f in sorted(tot):
-        print(f"  {por[f] / tot[f]:5.1%}  {f}  ({por[f]}/{tot[f]})")
-    return r
 
 
 def ver_prompt(config, instancia):

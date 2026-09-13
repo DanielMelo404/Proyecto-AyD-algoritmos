@@ -1,6 +1,6 @@
 # Proyecto Oráculo
 
-Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena configuración de prompt consultando un oráculo: cada evaluación nueva cuesta rollouts; las trazas de fallos son gratis.
+Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena configuración de prompt consultando un oráculo. No hay presupuesto de rollouts: el tope es el tiempo de la T4. Las trazas de fallos son gratis.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb)
 
@@ -13,13 +13,13 @@ Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena co
 
 ```
 r = oraculo.evaluar(config, instancias, semilla)
+r_val = oraculo.validar(config, n)
 
 r.precision        # 0.55
-r.trazas           # [{id, violo, salida}, ...]   ← gratis
-oraculo.gastado    # rollouts gastados
+r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 72 configuraciones (`espacio()`). El presupuesto lo fija el enunciado de cada semana.
+Hay 72 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
 
 ## Modelos
 
@@ -44,14 +44,13 @@ Los 7-8B son lentos en T4: eso es el tope real, no un contador.
 ```
 datos = cargar_datos()
 busqueda, validacion = dividir(datos)
-oraculo = Oraculo(modelo, busqueda)
+oraculo = Oraculo(modelo, busqueda, validacion)
 ```
 
-Busquen solo sobre `busqueda`. `validar` mide la config elegida en las familias reservadas y **no gasta presupuesto**. La nota final se mide en familias distintas a las dos particiones.
+Busquen solo sobre `busqueda`. `oraculo.validar` mide la config elegida en las familias reservadas, con una muestra fija de `n` instancias (las 75 tardan). La nota final se mide en familias distintas a las dos particiones.
 
 ```
-from ayudas import validar
-r_val = validar(oraculo, mejor[1], datos)
+r_val = oraculo.validar(mejor[1], n=15)
 ```
 
 ## Archivos públicos
@@ -60,7 +59,7 @@ r_val = validar(oraculo, mejor[1], datos)
 |---|---|
 | `proyecto_oraculo.ipynb` | El notebook de Colab |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
-| `ayudas.py` | Cargar modelo, datos, dividir, validar, ver un prompt, curva, entrega |
+| `ayudas.py` | Cargar modelo, datos, dividir, ver un prompt, curva, entrega |
 | `datos_visibles.json` | 300 instancias, 20 familias |
 
 ## Entrega

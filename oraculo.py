@@ -5,19 +5,21 @@ Una caja negra que evalúa configuraciones de prompt. Se consulta, no se abre.
 
     from oraculo import Oraculo, CATALOGO, espacio
 
-    o = Oraculo(modelo, datos)
-    r = o.evaluar(config, datos[:20], semilla=1)
+    o = Oraculo(modelo, busqueda, validacion)
+    r = o.evaluar(config, busqueda[:20], semilla=1)
+    r_val = o.validar(config, n=15)
 
     r.precision    # 0.55
     r.trazas       # [{id, violo, salida}, ...]
-    o.gastado      # 20
 """
 
 import hashlib
 import itertools
 import json
 import os
+import random
 import sys
+from collections import Counter
 
 import torch
 
@@ -107,14 +109,19 @@ class Resultado:
 
 
 class Oraculo:
-    def __init__(self, modelo, datos, cache="cache_oraculo.json", max_new_tokens=384, lote=8):
+    def __init__(
+        self, modelo, datos, validacion=None, cache="cache_oraculo.json",
+        max_new_tokens=384, lote=8,
+    ):
         self.model = modelo.red
         self.tok = modelo.tok
         self.nombre_modelo = getattr(modelo, "nombre", "desconocido")
         self.datos = datos
+        # Mezcla fija: la muestra de n instancias no depende del orden del archivo.
+        self.validacion = list(validacion or [])
+        random.Random(0).shuffle(self.validacion)
         self.max_new_tokens = max_new_tokens
         self.lote = lote
-        self.gastado = 0
 
         self.tok.pad_token = self.tok.pad_token or self.tok.eos_token
         self.tok.padding_side = "left"  # necesario para generar por lotes
@@ -137,7 +144,8 @@ class Oraculo:
     # ---- consulta ----------------------------------------------------
 
     def evaluar(self, config, instancias=None, semilla=1):
-        """Evalúa una configuración. Cobra 1 rollout por tripleta nueva."""
+        """Evalúa una configuración sobre las instancias dadas.
+        Lo ya calculado no se vuelve a generar."""
         if instancias is None:
             instancias = self.datos
 
@@ -152,7 +160,6 @@ class Oraculo:
             for (c, x), resp in zip(faltan, respuestas):
                 r, violo = self._verificar(x, resp)
                 self.cache[c] = [r, violo, resp]
-            self.gastado += len(faltan)
             self._guardar()
 
         res = [self.cache[c] for c in claves]
@@ -163,6 +170,33 @@ class Oraculo:
             if r == 0
         ]
         return Resultado(precision, trazas, len(res))
+
+    def validar(self, config, n=None, semilla=1):
+        """Precisión en las familias reservadas, con muestra fija.
+
+        `n`: cuántas instancias medir. Por defecto todas (tarda más).
+        Las mismas n instancias en cada llamada, para comparar parejo.
+        """
+        if not self.validacion:
+            raise ValueError(
+                "el oráculo se armó sin validación: "
+                "Oraculo(modelo, busqueda, validacion)"
+            )
+        conjunto = self.validacion if n is None else self.validacion[:n]
+        r = self.evaluar(config, conjunto, semilla=semilla)
+
+        ids_fallo = {t["id"] for t in r.trazas}
+        por = Counter()
+        tot = Counter()
+        for x in conjunto:
+            tot[x["familia"]] += 1
+            if x["id"] not in ids_fallo:
+                por[x["familia"]] += 1
+
+        print(f"validación: {r.precision:.1%}  ({r.n} inst)")
+        for f in sorted(tot):
+            print(f"  {por[f] / tot[f]:5.1%}  {f}  ({por[f]}/{tot[f]})")
+        return r
 
     # ---- por dentro --------------------------------------------------
 
