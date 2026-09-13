@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 
 import torch
+from tqdm.auto import tqdm
 
 # Dónde está clonado allenai/open-instruct (trae los verificadores).
 RUTA_VERIFICADORES = "/content/open-instruct"
@@ -143,7 +144,7 @@ class Oraculo:
 
     # ---- consulta ----------------------------------------------------
 
-    def evaluar(self, config, instancias=None, semilla=1):
+    def evaluar(self, config, instancias=None, semilla=1, *, desc="evaluando"):
         """Evalúa una configuración sobre las instancias dadas.
         Lo ya calculado no se vuelve a generar."""
         if instancias is None:
@@ -156,7 +157,7 @@ class Oraculo:
         if faltan:
             torch.manual_seed(semilla)
             prompts = [armar(config, x) for _, x in faltan]
-            respuestas = self._generar(prompts, config["temperatura"])
+            respuestas = self._generar(prompts, config["temperatura"], desc=desc)
             for (c, x), resp in zip(faltan, respuestas):
                 r, violo = self._verificar(x, resp)
                 self.cache[c] = [r, violo, resp]
@@ -183,7 +184,7 @@ class Oraculo:
                 "Oraculo(modelo, busqueda, validacion)"
             )
         conjunto = self.validacion if n is None else self.validacion[:n]
-        r = self.evaluar(config, conjunto, semilla=semilla)
+        r = self.evaluar(config, conjunto, semilla=semilla, desc="validando")
 
         ids_fallo = {t["id"] for t in r.trazas}
         por = Counter()
@@ -201,33 +202,40 @@ class Oraculo:
     # ---- por dentro --------------------------------------------------
 
     @torch.no_grad()
-    def _generar(self, prompts, temperatura):
+    def _generar(self, prompts, temperatura, desc="evaluando"):
         salidas = []
-        for i in range(0, len(prompts), self.lote):
-            trozo = prompts[i : i + self.lote]
-            textos = [
-                self.tok.apply_chat_template(
-                    [{"role": "user", "content": p}],
-                    add_generation_prompt=True,
-                    tokenize=False,
-                    **self._extra,
+        barra = tqdm(total=len(prompts), desc=desc, unit="inst", leave=False)
+        try:
+            for i in range(0, len(prompts), self.lote):
+                trozo = prompts[i : i + self.lote]
+                textos = [
+                    self.tok.apply_chat_template(
+                        [{"role": "user", "content": p}],
+                        add_generation_prompt=True,
+                        tokenize=False,
+                        **self._extra,
+                    )
+                    for p in trozo
+                ]
+                ent = self.tok(textos, return_tensors="pt", padding=True).to(
+                    self.model.device
                 )
-                for p in trozo
-            ]
-            ent = self.tok(textos, return_tensors="pt", padding=True).to(self.model.device)
-            muestreo = (
-                dict(do_sample=True, temperature=temperatura, top_p=0.9)
-                if temperatura > 0
-                else dict(do_sample=False)
-            )
-            out = self.model.generate(
-                **ent,
-                max_new_tokens=self.max_new_tokens,
-                pad_token_id=self.tok.pad_token_id,
-                **muestreo,
-            )
-            nuevos = out[:, ent["input_ids"].shape[-1] :]
-            salidas += self.tok.batch_decode(nuevos, skip_special_tokens=True)
+                muestreo = (
+                    dict(do_sample=True, temperature=temperatura, top_p=0.9)
+                    if temperatura > 0
+                    else dict(do_sample=False)
+                )
+                out = self.model.generate(
+                    **ent,
+                    max_new_tokens=self.max_new_tokens,
+                    pad_token_id=self.tok.pad_token_id,
+                    **muestreo,
+                )
+                nuevos = out[:, ent["input_ids"].shape[-1] :]
+                salidas += self.tok.batch_decode(nuevos, skip_special_tokens=True)
+                barra.update(len(trozo))
+        finally:
+            barra.close()
         return salidas
 
     def _verificar(self, instancia, respuesta):
