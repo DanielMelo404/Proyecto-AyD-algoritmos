@@ -53,15 +53,31 @@ def _parchear_compute_dtype(cfg):
     return True
 
 
+def _resolver_modelo(modelo: str) -> str:
+    if modelo in MODELOS:
+        return MODELOS[modelo]
+    if "/" in modelo:
+        return modelo
+    alias = ", ".join(MODELOS)
+    raise ValueError(
+        f"{modelo!r} no es un alias. Use {alias} "
+        "o un id público de Hugging Face (org/nombre)."
+    )
+
+
 def cargar_modelo(modelo="pequeno"):
-    """Carga un alias (`pequeno`, `qwen8b`, `mistral7b`) o un id de Hugging Face."""
+    """Carga un alias (`pequeno`, `qwen8b`, `mistral7b`) o un id público de HF.
+
+    `token=False`: nunca pide login. Los tres checkpoints son públicos.
+    """
     import torch
     from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-    nombre = MODELOS.get(modelo, modelo)
-    tok = AutoTokenizer.from_pretrained(nombre)
-    cfg = AutoConfig.from_pretrained(nombre)
-    kwargs = {"device_map": {"": 0}, "config": cfg}
+    nombre = _resolver_modelo(modelo)
+    print(f"cargando {modelo} → {nombre}")
+    tok = AutoTokenizer.from_pretrained(nombre, token=False)
+    cfg = AutoConfig.from_pretrained(nombre, token=False)
+    kwargs = {"device_map": {"": 0}, "config": cfg, "token": False}
     if not _parchear_compute_dtype(cfg):
         kwargs["dtype"] = torch.float16
     red = AutoModelForCausalLM.from_pretrained(nombre, **kwargs)
