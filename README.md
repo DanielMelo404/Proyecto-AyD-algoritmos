@@ -5,6 +5,7 @@ Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena co
 | Notebook | Colab |
 |---|---|
 | Proyecto (estudiantes) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb) |
+| Solución NPO · Qwen 1.7B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_qwen17B.ipynb) |
 | Solución NPO · Llama 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_llama3B.ipynb) |
 | Solución NPO · Ministral 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_mistral3B.ipynb) |
 
@@ -70,6 +71,7 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 | Archivo | Qué es |
 |---|---|
 | `proyecto_oraculo.ipynb` | El notebook del curso |
+| `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO con `pequeno` (Qwen3 1.7B) |
 | `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO con `llama3b` |
 | `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO con `ministral3b` |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
