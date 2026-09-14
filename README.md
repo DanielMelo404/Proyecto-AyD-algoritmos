@@ -89,3 +89,41 @@ Un `entrega.json` con grupo, configuración y semana:
  "semana": 3
 }
 ```
+
+## Para el profesor · calificar sobre el test privado
+
+La nota final no sale de `datos_visibles.json`: sale de un test de 294 instancias con
+restricciones que no están en este repo, para que no se pueda entrenar sobre ellas. Vive
+en Drive, no en GitHub — `calificar.ipynb`, `calificar.py` y `datos_test.json` nunca se
+publican.
+
+Preparar la carpeta de Drive (una sola vez):
+
+1. Crear `MyDrive/oraculo_profesor/` con estos archivos, copiados desde `profesor/` en
+   el checkout local (esa carpeta está en `.gitignore`, no sale de la máquina donde se
+   generó):
+   ```
+   MyDrive/oraculo_profesor/
+     calificar.ipynb
+     calificar.py
+     datos_test.json
+     entregas/            ← un entrega.json por grupo, o por subcarpeta
+   ```
+2. Abrir `calificar.ipynb` desde Drive (clic derecho → Abrir con → Google Colaboratory)
+   y correr las celdas 1–3. La celda 1 instala y clona `open-instruct` e `IFBench`; al
+   terminar pide reiniciar el entorno. La celda 2 monta Drive y carga el modelo — usar
+   el mismo alias con el que buscó cada grupo, la clave de caché lo incluye.
+
+Calificar, con el oráculo ya armado en la celda 3:
+
+```python
+r = calificar(oraculo, config, n=8)        # primero una muestra chica, cronometrada
+r = calificar(oraculo, config)             # las 294, una vez que se sabe el costo
+
+tabla = calificar_entregas(oraculo, CARPETA / "entregas")  # todos los grupos de una vez
+```
+
+`calificar` imprime precisión y fallos por familia, nunca prompts ni respuestas — para
+mirar una traza hay que pedirla aparte con `ver_fallos(r)`. El caché queda en Drive:
+una desconexión de Colab no cuesta la corrida, y dos grupos con la misma config sólo se
+generan una vez.
