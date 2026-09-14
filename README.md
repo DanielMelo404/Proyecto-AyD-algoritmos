@@ -28,6 +28,8 @@ Hay 72 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
 | Alias | Checkpoint | Notas |
 |---|---|---|
 | `pequeno` | `Qwen/Qwen3-1.7B` | el de ahora; más adelante se retira |
+| `ministral3b` | `mistralai/Ministral-3-3B-Instruct-2512-BF16` | 3.8B en fp16 (~7.7 GB), T4 |
+| `llama3b` | `unsloth/Llama-3.2-3B-Instruct` | 3.2B en fp16 (~6.4 GB), T4 |
 | `qwen8b` | `unsloth/Qwen3-8B-unsloth-bnb-4bit` | 4-bit, T4 |
 | `mistral7b` | `unsloth/mistral-7b-instruct-v0.3-bnb-4bit` | 4-bit, T4 |
 

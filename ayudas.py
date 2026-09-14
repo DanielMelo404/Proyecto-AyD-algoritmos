@@ -15,6 +15,9 @@ from oraculo import armar
 
 MODELOS = {
     "pequeno": "Qwen/Qwen3-1.7B",
+    # El repo por defecto de Ministral 3 es FP8: la T4 (sm_75) no lo soporta.
+    "ministral3b": "mistralai/Ministral-3-3B-Instruct-2512-BF16",
+    "llama3b": "unsloth/Llama-3.2-3B-Instruct",
     "qwen8b": "unsloth/Qwen3-8B-unsloth-bnb-4bit",
     "mistral7b": "unsloth/mistral-7b-instruct-v0.3-bnb-4bit",
 }
@@ -54,13 +57,25 @@ def _resolver_modelo(modelo: str) -> str:
     )
 
 
-def cargar_modelo(modelo="pequeno"):
-    """Carga un alias (`pequeno`, `qwen8b`, `mistral7b`) o un id público de HF.
+def _cargar_red(nombre, kwargs):
+    """Ministral 3 llega como `Mistral3ForConditionalGeneration` (lleva torre
+    de visión) y no está en el mapeo de AutoModelForCausalLM, aunque el oráculo
+    solo le mande texto. El ValueError salta antes de bajar los pesos."""
+    from transformers import AutoModelForCausalLM, AutoModelForImageTextToText
 
-    `token=False`: nunca pide login. Los tres checkpoints son públicos.
+    try:
+        return AutoModelForCausalLM.from_pretrained(nombre, **kwargs)
+    except ValueError:
+        return AutoModelForImageTextToText.from_pretrained(nombre, **kwargs)
+
+
+def cargar_modelo(modelo="pequeno"):
+    """Carga un alias (ver `MODELOS`) o un id público de HF.
+
+    `token=False`: nunca pide login. Todos los checkpoints son públicos.
     """
     import torch
-    from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoConfig, AutoTokenizer
 
     if not torch.cuda.is_available():
         raise RuntimeError(
@@ -75,7 +90,7 @@ def cargar_modelo(modelo="pequeno"):
     kwargs = {"device_map": {"": "cuda:0"}, "config": cfg, "token": False}
     if not _parchear_compute_dtype(cfg):
         kwargs["dtype"] = torch.float16
-    red = AutoModelForCausalLM.from_pretrained(nombre, **kwargs)
+    red = _cargar_red(nombre, kwargs)
     red.eval()
     print(f"{nombre}  VRAM: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
     return Modelo(red, tok, nombre)
