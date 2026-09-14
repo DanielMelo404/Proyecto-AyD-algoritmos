@@ -172,11 +172,14 @@ class Oraculo:
         ]
         return Resultado(precision, trazas, len(res))
 
-    def validar(self, config, n=None, semilla=1):
-        """Precisión en las familias reservadas, con muestra fija.
+    def validar(self, config, n=None, semilla=1, top=8):
+        """Precisión en la partición de validación, con muestra fija.
 
         `n`: cuántas instancias medir. Por defecto todas (tarda más).
         Las mismas n instancias en cada llamada, para comparar parejo.
+
+        Imprime además las restricciones que más veces tumbaron la respuesta.
+        Una instancia puede traer varias: se cuenta la primera que falló.
         """
         if not self.validacion:
             raise ValueError(
@@ -186,17 +189,9 @@ class Oraculo:
         conjunto = self.validacion if n is None else self.validacion[:n]
         r = self.evaluar(config, conjunto, semilla=semilla, desc="validando")
 
-        ids_fallo = {t["id"] for t in r.trazas}
-        por = Counter()
-        tot = Counter()
-        for x in conjunto:
-            tot[x["familia"]] += 1
-            if x["id"] not in ids_fallo:
-                por[x["familia"]] += 1
-
         print(f"validación: {r.precision:.1%}  ({r.n} inst)")
-        for f in sorted(tot):
-            print(f"  {por[f] / tot[f]:5.1%}  {f}  ({por[f]}/{tot[f]})")
+        for iid, veces in Counter(t["violo"] for t in r.trazas).most_common(top):
+            print(f"  {veces:3}  {iid}")
         return r
 
     # ---- por dentro --------------------------------------------------

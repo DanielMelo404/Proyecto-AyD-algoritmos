@@ -19,16 +19,6 @@ MODELOS = {
     "mistral7b": "unsloth/mistral-7b-instruct-v0.3-bnb-4bit",
 }
 
-# Familias reservadas: prefijos disjuntos de los de búsqueda, para imitar
-# el salto del set oculto (restricciones de un tipo que no se vio al buscar).
-FAMILIAS_VALIDACION = (
-    "combination:repeat_prompt",
-    "last_word:last_word_sent",
-    "last_word:last_word_answer",
-    "punctuation:punctuation_exclamation",
-    "length_constraints:nth_paragraph_first_word",
-)
-
 
 class Modelo:
     """Red + tokenizador + nombre, para armar el oráculo en una línea."""
@@ -91,22 +81,30 @@ def cargar_modelo(modelo="pequeno"):
     return Modelo(red, tok, nombre)
 
 
+def _promedio_restricciones(filas):
+    return sum(len(x["ids"]) for x in filas) / len(filas) if filas else 0.0
+
+
 def cargar_datos(ruta="datos_visibles.json"):
     datos = json.load(open(ruta))
-    print(f"{len(datos)} instancias, {len({x['familia'] for x in datos})} familias")
+    print(
+        f"{len(datos)} instancias, "
+        f"{_promedio_restricciones(datos):.1f} restricciones por instancia"
+    )
     return datos
 
 
 def dividir(datos):
-    """(busqueda, validacion) — familias y prefijos disjuntos."""
-    validacion = [x for x in datos if x["familia"] in FAMILIAS_VALIDACION]
-    busqueda = [x for x in datos if x["familia"] not in FAMILIAS_VALIDACION]
-    print(
-        f"búsqueda: {len(busqueda)} inst, {len({x['familia'] for x in busqueda})} familias"
-    )
-    print(
-        f"validación: {len(validacion)} inst, {len({x['familia'] for x in validacion})} familias"
-    )
+    """(busqueda, validacion) — particiones disjuntas del mismo pool.
+
+    El split viene marcado en los datos. Las dos mitades comparten distribución:
+    validar mide si la config aguanta instancias nuevas, no restricciones de un
+    tipo nuevo (ese salto se mide al calificar, con familias que no están aquí).
+    """
+    busqueda = [x for x in datos if x["split"] == "busqueda"]
+    validacion = [x for x in datos if x["split"] == "validacion"]
+    print(f"búsqueda: {len(busqueda)} inst, {_promedio_restricciones(busqueda):.1f} restr/inst")
+    print(f"validación: {len(validacion)} inst, {_promedio_restricciones(validacion):.1f} restr/inst")
     return busqueda, validacion
 
 

@@ -7,7 +7,7 @@ alwaysApply: true
 
 The oracle is a black box. Students call `evaluar`. Do not document or expose `_generar`, `_verificar`, or the cache format in the notebook.
 
-There is no rollout budget. Cost is generation time on the T4. `r.trazas` is free and unlimited.
+Students may call `evaluar` and `validar` as many times as they want. Never add counters, budgets or any accounting of consultations. `r.trazas` comes with every result.
 
 Keep the student path to four lines before their cell:
 

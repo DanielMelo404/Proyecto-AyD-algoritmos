@@ -1,6 +1,6 @@
 # Proyecto Oráculo
 
-Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena configuración de prompt consultando un oráculo. No hay presupuesto de rollouts: el tope es el tiempo de la T4. Las trazas de fallos son gratis.
+Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena configuración de prompt consultando un oráculo. Busquen y validen cuantas veces quieran: el caché guarda lo ya generado y las trazas de fallos vienen con cada resultado.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb)
 
@@ -35,11 +35,11 @@ Hay 72 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
 modelo = cargar_modelo("qwen8b")
 ```
 
-Los 7-8B son lentos en T4: eso es el tope real, no un contador.
+Los 7-8B son lentos en T4: tengan paciencia con las primeras corridas.
 
 ## Búsqueda y validación
 
-`datos_visibles.json` tiene 300 instancias en 20 familias. `dividir` reserva 5 familias (75 instancias) cuyos prefijos no aparecen en las otras 15 (225 instancias):
+`datos_visibles.json` tiene 450 instancias: **150 de búsqueda y 300 de validación**. Son el mismo split que usan [GEPA](https://arxiv.org/abs/2507.19457) y [NPO](https://arxiv.org/abs/2608.27266) sobre IF-RLVR Train, de donde salen estos datos. No son las filas exactas de los papers —no publican los índices—, sí la fuente, los tamaños y la disyunción.
 
 ```
 datos = cargar_datos()
@@ -47,11 +47,17 @@ busqueda, validacion = dividir(datos)
 oraculo = Oraculo(modelo, busqueda, validacion)
 ```
 
-Busquen solo sobre `busqueda`. `oraculo.validar` mide la config elegida en las familias reservadas, con una muestra fija de `n` instancias (las 75 tardan). La nota final se mide en familias distintas a las dos particiones.
+Las dos particiones salen del mismo pool y comparten distribución: validar mide si la config aguanta **instancias** nuevas, no restricciones de un tipo nuevo. Ese otro salto se mide al calificar, con familias que no están en este archivo.
+
+Busquen solo sobre `busqueda`. `oraculo.validar` mide la config elegida con una muestra fija de `n` instancias (las 300 tardan) e imprime qué restricciones se cayeron más.
 
 ```
-r_val = oraculo.validar(mejor[1], n=15)
+r_val = oraculo.validar(mejor[1], n=30)
 ```
+
+### Ojo con el todo-o-nada
+
+Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo-o-nada: basta que falle una para que valga 0. En las instancias más duras el modelo acierta poco, así que **con pocas instancias muchas configuraciones van a marcar `0.0` y parecer iguales**. Si su búsqueda no logra distinguir nada, suban el número de instancias antes de cambiar de heurística — decidir cuántas medir es parte del problema.
 
 ## Archivos públicos
 
@@ -60,7 +66,7 @@ r_val = oraculo.validar(mejor[1], n=15)
 | `proyecto_oraculo.ipynb` | El notebook de Colab |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
 | `ayudas.py` | Cargar modelo, datos, dividir, ver un prompt, curva, entrega |
-| `datos_visibles.json` | 300 instancias, 20 familias |
+| `datos_visibles.json` | 450 instancias: 150 de búsqueda, 300 de validación |
 
 ## Entrega
 
