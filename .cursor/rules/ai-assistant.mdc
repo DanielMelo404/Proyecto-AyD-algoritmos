@@ -7,7 +7,7 @@ alwaysApply: true
 
 - Respect the 500-line limit. Code first, short explanation after.
 - Match existing files. Do not invent APIs.
-- Never commit `datos_ocultos.json`, `profesor/`, secrets, or caches.
+- Never commit `datos_ocultos.json`, secrets, or caches.
 - Do not put reconstruction hints for the hidden split in public files.
 
 **Project:** `Proyecto-AyD-algoritmos` — Colab notebook + oracle for prompt-config search.

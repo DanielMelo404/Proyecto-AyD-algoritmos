@@ -92,27 +92,28 @@ Un `entrega.json` con grupo, configuración y semana:
 
 ## Para el profesor · calificar sobre el test privado
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/profesor/calificar.ipynb)
+
 La nota final no sale de `datos_visibles.json`: sale de un test de 294 instancias con
-restricciones que no están en este repo, para que no se pueda entrenar sobre ellas. Vive
-en Drive, no en GitHub — `calificar.ipynb`, `calificar.py` y `datos_test.json` nunca se
-publican.
+restricciones que no están ahí. Los archivos están en `profesor/`:
 
-Preparar la carpeta de Drive (una sola vez):
+| Archivo | Qué es |
+|---|---|
+| `profesor/calificar.ipynb` | Notebook para poner nota |
+| `profesor/calificar.py` | `calificar` y `calificar_entregas` |
+| `profesor/datos_test.json` | Las 294 instancias del test |
 
-1. Crear `MyDrive/oraculo_profesor/` con estos archivos, copiados desde `profesor/` en
-   el checkout local (esa carpeta está en `.gitignore`, no sale de la máquina donde se
-   generó):
-   ```
-   MyDrive/oraculo_profesor/
-     calificar.ipynb
-     calificar.py
-     datos_test.json
-     entregas/            ← un entrega.json por grupo, o por subcarpeta
-   ```
-2. Abrir `calificar.ipynb` desde Drive (clic derecho → Abrir con → Google Colaboratory)
-   y correr las celdas 1–3. La celda 1 instala y clona `open-instruct` e `IFBench`; al
-   terminar pide reiniciar el entorno. La celda 2 monta Drive y carga el modelo — usar
-   el mismo alias con el que buscó cada grupo, la clave de caché lo incluye.
+`datos_ocultos.json` y los scripts de preparación no entran a git.
+
+En Drive solo hace falta el caché y las entregas (una sola vez):
+
+1. Crear `MyDrive/oraculo_profesor/entregas/` con un `entrega.json` por grupo, o por
+   subcarpeta.
+2. Abrir `calificar.ipynb` desde GitHub (badge de arriba) y correr las celdas 1–3.
+   La celda 1 instala, clona `open-instruct` e `IFBench` y baja `calificar.py` y
+   `datos_test.json`; al terminar pide reiniciar el entorno. La celda 2 monta Drive
+   (caché + entregas) y carga el modelo — usar el mismo alias con el que buscó cada
+   grupo, la clave de caché lo incluye.
 
 Calificar, con el oráculo ya armado en la celda 3:
 

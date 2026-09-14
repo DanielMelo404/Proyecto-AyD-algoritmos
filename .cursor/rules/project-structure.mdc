@@ -12,12 +12,14 @@ Proyecto-AyD-algoritmos/
 ├── ayudas.py                  # lo que el estudiante sí puede leer
 ├── datos_visibles.json        # 300 instancias
 ├── README.md
-├── profesor/                  # gitignored, no se publica
-│   ├── prepara_datos.py
-│   └── datos_ocultos.json
+├── profesor/
+│   ├── calificar.ipynb        # notebook para poner nota
+│   ├── calificar.py
+│   └── datos_test.json        # 294 instancias del test
 └── .cursor/rules/
 ```
 
-Public: notebook, `oraculo.py`, `ayudas.py`, `datos_visibles.json`, README.
+Public: notebooks, `oraculo.py`, `ayudas.py`, `datos_visibles.json`, README,
+`profesor/calificar.py`, `profesor/calificar.ipynb`, `profesor/datos_test.json`.
 
-Never commit `profesor/`, `datos_ocultos.json`, caches, or `entrega.json`.
+Never commit `datos_ocultos.json`, caches, or `entrega.json`.
