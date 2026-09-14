@@ -19,6 +19,7 @@ import json
 import os
 import random
 import sys
+import time
 from collections import Counter
 
 import torch
@@ -66,6 +67,15 @@ CATALOGO = {
 TEMPERATURAS = [0.0, 0.3, 0.7]
 
 RANURAS = ["rol", "estrategia", "formato", "verificacion"]
+
+# Presupuesto de un lote, en lote × largo². El prefill materializa una matriz de
+# atención de lote × cabezas × largo² valores, así que el tope no puede ser solo
+# el número de prompts: 8e6 son ~0.5 GB en fp16 con 32 cabezas, que es lo que
+# aguanta una T4 con un 8B de 4 bits encima.
+PRESUPUESTO_ATENCION = 8_000_000
+
+# Segundos mínimos entre volcados del caché a disco durante una tanda.
+PERIODO_GUARDADO = 60
 
 
 def espacio(temperaturas=(0.0,)):
@@ -146,6 +156,7 @@ class Oraculo:
     def __init__(
         self, modelo, datos, validacion=None, cache="cache_oraculo.json",
         max_new_tokens=384, lote=8, registros=None,
+        presupuesto=PRESUPUESTO_ATENCION,
     ):
         """
         Parameters
@@ -160,10 +171,14 @@ class Oraculo:
             JSON en disco. En Colab conviene un path de Drive: una
             desconexión no tira las generaciones ya pagadas.
         max_new_tokens, lote:
-            Tope de tokens nuevos y tamaño de batch al generar.
+            Tope de tokens nuevos y tamaño **máximo** de batch al generar. Un
+            lote con prompts largos se arma más chico solo (ver `presupuesto`).
         registros:
             Verificadores extra (el de IFBench al calificar). El de IFEvalG
             ya va primero y cubre `datos_visibles.json`.
+        presupuesto:
+            Tope de `lote × largo²` por batch, en tokens². Bajarlo si la GPU
+            se queda sin memoria; subirlo si sobra VRAM y se quiere ir rápido.
         """
         self.model = modelo.red
         self.tok = modelo.tok
@@ -174,6 +189,7 @@ class Oraculo:
         random.Random(0).shuffle(self.validacion)
         self.max_new_tokens = max_new_tokens
         self.lote = lote
+        self.presupuesto = presupuesto
         # Cadena de registros de verificadores, en orden de consulta. El de IFEvalG
         # va primero y cubre las familias de datos_visibles.json; quien califique
         # con otras familias agrega su registro detrás.
@@ -193,6 +209,7 @@ class Oraculo:
 
         self.ruta_cache = cache
         self.cache = {}
+        self._ultimo_guardado = 0.0
         if cache and os.path.exists(cache):
             self.cache = json.load(open(cache))
             print(f"caché: {len(self.cache)} respuestas recuperadas")
@@ -221,10 +238,16 @@ class Oraculo:
         if faltan:
             torch.manual_seed(semilla)
             prompts = [armar(config, x) for _, x in faltan]
-            respuestas = self._generar(prompts, config["temperatura"], desc=desc)
-            for (c, x), resp in zip(faltan, respuestas):
-                r, violo = self._verificar(x, resp)
-                self.cache[c] = [r, violo, resp]
+            # Se cachea lote por lote: si Colab se cae a mitad de tanda, lo ya
+            # generado queda en disco y la próxima corrida no lo vuelve a pagar.
+            for indices, respuestas in self._generar(
+                prompts, config["temperatura"], desc=desc
+            ):
+                for i, resp in zip(indices, respuestas):
+                    c, x = faltan[i]
+                    r, violo = self._verificar(x, resp)
+                    self.cache[c] = [r, violo, resp]
+                self._guardar(forzar=False)
             self._guardar()
 
         res = [self.cache[c] for c in claves]
@@ -260,47 +283,88 @@ class Oraculo:
 
     # ---- por dentro --------------------------------------------------
 
-    @torch.no_grad()
-    def _generar(self, prompts, temperatura, desc="evaluando"):
-        """Genera un texto por prompt, en lotes, sin gradientes.
+    def _lotes(self, largos):
+        """Índices de `largos` agrupados en lotes, ordenados por longitud.
 
-        `padding_side=left` (puesto en `__init__`) es lo que permite generar
-        varios a la vez: el modelo escribe a la derecha del padding. Temperatura
-        0 → greedy; si no, muestreo con `top_p=0.9`.
+        Dos razones para no cortar la lista tal como viene: el padding de un
+        lote lo fija el prompt más largo que le toque (agrupar por longitud
+        ahorra cómputo), y la atención del prefill crece con el **cuadrado** de
+        ese largo. Un prompt de 3k tokens metido en un lote de 8 pide 2.7 GB de
+        una sola vez; acá va casi solo, aunque tarde más.
         """
-        salidas = []
+        orden = sorted(range(len(largos)), key=lambda i: largos[i])
+        lotes, actual = [], []
+        for i in orden:
+            cabe = (len(actual) + 1) * largos[i] ** 2 <= self.presupuesto
+            if actual and (len(actual) >= self.lote or not cabe):
+                lotes.append(actual)
+                actual = []
+            actual.append(i)  # un prompt solo entra siempre, aunque pase el tope
+        if actual:
+            lotes.append(actual)
+        return lotes
+
+    def _generar(self, prompts, temperatura, desc="evaluando"):
+        """Itera `(indices, textos)` lote por lote.
+
+        Entrega cada lote apenas sale —en vez de devolver la lista completa al
+        final— para que `evaluar` lo cachee enseguida. `indices` apunta a
+        `prompts`: los lotes no van en el orden de entrada (ver `_lotes`).
+        Temperatura 0 → greedy; si no, muestreo con `top_p=0.9`.
+        """
+        textos = [
+            self.tok.apply_chat_template(
+                [{"role": "user", "content": p}],
+                add_generation_prompt=True,
+                tokenize=False,
+                **self._extra,
+            )
+            for p in prompts
+        ]
+        largos = [len(x) for x in self.tok(textos).input_ids]
+        muestreo = (
+            dict(do_sample=True, temperature=temperatura, top_p=0.9)
+            if temperatura > 0
+            else dict(do_sample=False)
+        )
+
         barra = tqdm(total=len(prompts), desc=desc, unit="inst", leave=False)
         try:
-            for i in range(0, len(prompts), self.lote):
-                trozo = prompts[i : i + self.lote]
-                textos = [
-                    self.tok.apply_chat_template(
-                        [{"role": "user", "content": p}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **self._extra,
-                    )
-                    for p in trozo
-                ]
-                ent = self.tok(textos, return_tensors="pt", padding=True).to(
-                    self.model.device
-                )
-                muestreo = (
-                    dict(do_sample=True, temperature=temperatura, top_p=0.9)
-                    if temperatura > 0
-                    else dict(do_sample=False)
-                )
-                out = self.model.generate(
-                    **ent,
-                    max_new_tokens=self.max_new_tokens,
-                    pad_token_id=self.tok.pad_token_id,
-                    **muestreo,
-                )
-                nuevos = out[:, ent["input_ids"].shape[-1] :]
-                salidas += self.tok.batch_decode(nuevos, skip_special_tokens=True)
-                barra.update(len(trozo))
+            for indices in self._lotes(largos):
+                yield indices, self._lote([textos[i] for i in indices], muestreo)
+                barra.update(len(indices))
         finally:
             barra.close()
+
+    def _lote(self, textos, muestreo):
+        """Un lote. Si la GPU se queda sin memoria, reintenta de a un prompt:
+        mucho más lento, pero no tira la corrida por un prompt largo suelto."""
+        try:
+            return self._decodificar(textos, muestreo)
+        except torch.cuda.OutOfMemoryError:
+            if len(textos) == 1:
+                raise
+            torch.cuda.empty_cache()
+            print(f"sin VRAM con lote de {len(textos)}: reintentando de a uno")
+            return [self._decodificar([t], muestreo)[0] for t in textos]
+
+    @torch.no_grad()
+    def _decodificar(self, textos, muestreo):
+        """Tokeniza, genera sin gradientes y devuelve solo lo nuevo.
+
+        `padding_side=left` (puesto en `__init__`) es lo que permite generar
+        varios a la vez: el modelo escribe a la derecha del padding.
+        """
+        ent = self.tok(textos, return_tensors="pt", padding=True).to(self.model.device)
+        out = self.model.generate(
+            **ent,
+            max_new_tokens=self.max_new_tokens,
+            pad_token_id=self.tok.pad_token_id,
+            **muestreo,
+        )
+        nuevos = out[:, ent["input_ids"].shape[-1] :]
+        salidas = self.tok.batch_decode(nuevos, skip_special_tokens=True)
+        del ent, out, nuevos  # el pico del lote no se suma al del siguiente
         return salidas
 
     def _clase(self, iid):
@@ -327,8 +391,18 @@ class Oraculo:
                 return 0, iid
         return 1, None
 
-    def _guardar(self):
-        """Vuelca el caché a disco después de cada tanda nueva. Así un corte
-        de Colab a mitad de lote no tira lo que ya se generó en tandas previas."""
-        if self.ruta_cache:
-            json.dump(self.cache, open(self.ruta_cache, "w"))
+    def _guardar(self, forzar=True):
+        """Vuelca el caché a disco. Así un corte de Colab —o un OOM— no tira
+        lo que ya se generó.
+
+        Con `forzar=False` escribe como mucho una vez cada `PERIODO_GUARDADO`
+        segundos: el caché se llena de respuestas largas y volcarlo a Drive
+        después de cada lote termina costando más que generar.
+        """
+        if not self.ruta_cache:
+            return
+        ahora = time.monotonic()
+        if not forzar and ahora - self._ultimo_guardado < PERIODO_GUARDADO:
+            return
+        json.dump(self.cache, open(self.ruta_cache, "w"))
+        self._ultimo_guardado = ahora
