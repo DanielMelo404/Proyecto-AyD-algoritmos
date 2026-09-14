@@ -2,11 +2,15 @@
 
 Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena configuración de prompt consultando un oráculo. Busquen y validen cuantas veces quieran: el caché guarda lo ya generado y las trazas de fallos vienen con cada resultado.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb)
+| Notebook | Colab |
+|---|---|
+| Proyecto (estudiantes) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb) |
+| Solución NPO · Llama 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_llama3B.ipynb) |
+| Solución NPO · Ministral 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_mistral3B.ipynb) |
 
 ## Cómo se juega
 
-1. Abran el notebook en Colab (botón de arriba).
+1. Abran el notebook del curso en Colab (primera fila de la tabla).
 2. Corran las celdas 1–3. En la 1, **reinicien el entorno** cuando lo pida.
 3. Escriban su heurística **solo en la celda 4**.
 4. Exporten `entrega.json` en la celda 5.
@@ -65,7 +69,9 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 
 | Archivo | Qué es |
 |---|---|
-| `proyecto_oraculo.ipynb` | El notebook de Colab |
+| `proyecto_oraculo.ipynb` | El notebook del curso |
+| `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO con `llama3b` |
+| `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO con `ministral3b` |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
 | `ayudas.py` | Cargar modelo, datos, dividir, ver un prompt, curva, entrega |
 | `datos_visibles.json` | 450 instancias: 150 de búsqueda, 300 de validación |
