@@ -36,6 +36,8 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 #  El catálogo de ranuras
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
+# Cada ranura de la config es un índice en su lista. "" = no poner nada.
+# rol / estrategia / formato se pegan ANTES del prompt; verificacion, DESPUÉS.
 
 CATALOGO = {
     "rol": [
@@ -67,7 +69,12 @@ RANURAS = ["rol", "estrategia", "formato", "verificacion"]
 
 
 def espacio(temperaturas=(0.0,)):
-    """Todas las configuraciones posibles. Por defecto 72 (temperatura fija)."""
+    """Producto cartesiano de los índices del catálogo × temperaturas.
+
+    Por defecto temperatura fija en 0.0 → 3×4×3×2 = 72 configs. Pasar
+    `TEMPERATURAS` (0.0, 0.3, 0.7) triplea el espacio. Cada config es un
+    dict ``{rol, estrategia, formato, verificacion, temperatura}``.
+    """
     tamanos = [range(len(CATALOGO[r])) for r in RANURAS]
     return [
         dict(zip(RANURAS, combo), temperatura=t)
@@ -76,7 +83,12 @@ def espacio(temperaturas=(0.0,)):
 
 
 def armar(config, instancia):
-    """config + instancia → el texto exacto que se le manda al modelo."""
+    """Pega las ranuras no vacías alrededor del prompt de la instancia.
+
+    rol / estrategia / formato van **antes**; verificacion va **después**.
+    Los strings vacíos del catálogo se omiten para no meter líneas en blanco
+    que el modelo pueda leer como parte de la tarea.
+    """
     cabeza = [CATALOGO[r][config[r]] for r in ("rol", "estrategia", "formato")]
     cola = CATALOGO["verificacion"][config["verificacion"]]
     partes = [t for t in cabeza if t] + [instancia["prompt"]]
@@ -86,6 +98,11 @@ def armar(config, instancia):
 
 
 def _id_config(config):
+    """Huella corta de la config: entra en la clave de caché.
+
+    `sort_keys` para que dos dicts con las mismas ranuras en otro orden
+    no disparen una generación de más.
+    """
     return hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
 
 
@@ -95,6 +112,14 @@ def _id_config(config):
 
 
 class Resultado:
+    """Lo que devuelven `evaluar` y `validar`.
+
+    `precision` es la fracción de instancias que cumplieron **todas** las
+    restricciones. `trazas` trae solo los fallos (`id`, `violo`, `salida`);
+    `violo` es la primera familia que no pasó, no un listado de todas.
+    `n` es el tamaño del lote, para no inferirlo de las trazas.
+    """
+
     def __init__(self, precision, trazas, n):
         self.precision = precision
         self.trazas = trazas
@@ -110,10 +135,36 @@ class Resultado:
 
 
 class Oraculo:
+    """Caja negra: una config + instancias → precisión y trazas de fallo.
+
+    `evaluar` busca sobre el conjunto que le pasen (en el notebook: `busqueda`).
+    `validar` mide sobre la partición de validación, con muestra fija, para
+    comparar configs en igualdad de condiciones. Lo ya generado se reusa;
+    se puede consultar las veces que se quiera.
+    """
+
     def __init__(
         self, modelo, datos, validacion=None, cache="cache_oraculo.json",
         max_new_tokens=384, lote=8, registros=None,
     ):
+        """
+        Parameters
+        ----------
+        modelo:
+            `Modelo` de `ayudas.cargar_modelo` (red, tokenizador, nombre).
+        datos:
+            Instancias de búsqueda. `evaluar(config)` sin lista usa estas.
+        validacion:
+            Instancias de `dividir`. Hace falta para `validar`.
+        cache:
+            JSON en disco. En Colab conviene un path de Drive: una
+            desconexión no tira las generaciones ya pagadas.
+        max_new_tokens, lote:
+            Tope de tokens nuevos y tamaño de batch al generar.
+        registros:
+            Verificadores extra (el de IFBench al calificar). El de IFEvalG
+            ya va primero y cubre `datos_visibles.json`.
+        """
         self.model = modelo.red
         self.tok = modelo.tok
         self.nombre_modelo = getattr(modelo, "nombre", "desconocido")
@@ -150,7 +201,16 @@ class Oraculo:
 
     def evaluar(self, config, instancias=None, semilla=1, *, desc="evaluando"):
         """Evalúa una configuración sobre las instancias dadas.
-        Lo ya calculado no se vuelve a generar."""
+
+        Lo ya calculado no se vuelve a generar: misma config + misma instancia
+        + misma semilla + mismo modelo reusa la respuesta. `semilla` fija el
+        muestreo cuando `temperatura > 0`; en 0.0 el decode es greedy.
+
+        Returns
+        -------
+        Resultado
+            `precision`, `trazas` (solo fallos) y `n`.
+        """
         if instancias is None:
             instancias = self.datos
 
@@ -202,6 +262,12 @@ class Oraculo:
 
     @torch.no_grad()
     def _generar(self, prompts, temperatura, desc="evaluando"):
+        """Genera un texto por prompt, en lotes, sin gradientes.
+
+        `padding_side=left` (puesto en `__init__`) es lo que permite generar
+        varios a la vez: el modelo escribe a la derecha del padding. Temperatura
+        0 → greedy; si no, muestreo con `top_p=0.9`.
+        """
         salidas = []
         barra = tqdm(total=len(prompts), desc=desc, unit="inst", leave=False)
         try:
@@ -238,13 +304,19 @@ class Oraculo:
         return salidas
 
     def _clase(self, iid):
+        """Clase del verificador para esa familia. IFEvalG primero; el resto
+        de `registros` (IFBench al calificar) solo si el id no está ahí."""
         for reg in self.registros:
             if iid in reg:
                 return reg[iid]
         raise KeyError(f"ningún registro conoce {iid!r}")
 
     def _verificar(self, instancia, respuesta):
-        """(1, None) si cumple todo; (0, familia) si falla alguna."""
+        """(1, None) si cumple todo; (0, familia) si falla alguna.
+
+        Recorre las restricciones en orden y se queda con la primera que falla:
+        el todo-o-nada no necesita las demás, y `violo` apunta a esa familia.
+        """
         for iid, kw in zip(instancia["ids"], instancia["kwargs"]):
             c = self._clase(iid)(iid)
             c.build_description(**kw)
@@ -256,5 +328,7 @@ class Oraculo:
         return 1, None
 
     def _guardar(self):
+        """Vuelca el caché a disco después de cada tanda nueva. Así un corte
+        de Colab a mitad de lote no tira lo que ya se generó en tandas previas."""
         if self.ruta_cache:
             json.dump(self.cache, open(self.ruta_cache, "w"))

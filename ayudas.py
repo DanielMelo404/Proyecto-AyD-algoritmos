@@ -6,6 +6,9 @@ ayudas.py — funciones que el estudiante sí puede leer.
     modelo = cargar_modelo("qwen17b")
     datos = cargar_datos()
     busqueda, validacion = dividir(datos)
+
+El oráculo (`oraculo.py`) se consulta, no se abre. Acá está lo que sí hace falta
+para armarlo: bajar el modelo, leer el JSON visible y partir búsqueda/validación.
 """
 
 import json
@@ -24,7 +27,12 @@ MODELOS = {
 
 
 class Modelo:
-    """Red + tokenizador + nombre, para armar el oráculo en una línea."""
+    """Red + tokenizador + nombre, para armar el oráculo en una línea.
+
+    El oráculo no importa `transformers`: recibe este envoltorio. `nombre` entra
+    en la clave de caché, así que cambiar de checkpoint no reusa respuestas
+    de otro modelo.
+    """
 
     def __init__(self, red, tok, nombre):
         self.red, self.tok, self.nombre = red, tok, nombre
@@ -46,6 +54,12 @@ def _parchear_compute_dtype(cfg):
 
 
 def _resolver_modelo(modelo: str) -> str:
+    """Alias de `MODELOS` → id de Hugging Face, o el id si ya trae barra.
+
+    Un id `org/nombre` se deja pasar para cargar checkpoints que no están en
+    la tabla sin tocar este archivo. Un nombre suelto que no es alias falla
+    en claro, con la lista de alias válidos.
+    """
     if modelo in MODELOS:
         return MODELOS[modelo]
     if "/" in modelo:
@@ -70,9 +84,16 @@ def _cargar_red(nombre, kwargs):
 
 
 def cargar_modelo(modelo="qwen17b"):
-    """Carga un alias (ver `MODELOS`) o un id público de HF.
+    """Carga un alias (ver `MODELOS`) o un id público de Hugging Face.
 
-    `token=False`: nunca pide login. Todos los checkpoints son públicos.
+    `token=False`: nunca pide login. Todos los checkpoints de la tabla son
+    públicos. Exige GPU: en Colab hay que elegir T4 antes, si no el mensaje
+    indica el menú. Devuelve un `Modelo` listo para `Oraculo(...)`.
+
+    Parameters
+    ----------
+    modelo:
+        Alias (`qwen17b`, `llama3b`, …) o id `org/nombre`.
     """
     import torch
     from transformers import AutoConfig, AutoTokenizer
@@ -97,10 +118,23 @@ def cargar_modelo(modelo="qwen17b"):
 
 
 def _promedio_restricciones(filas):
+    """Restricciones por instancia. El verificador es todo-o-nada: una media
+    más alta implica instancias más difíciles de acertar de un solo golpe."""
     return sum(len(x["ids"]) for x in filas) / len(filas) if filas else 0.0
 
 
 def cargar_datos(ruta="datos_visibles.json"):
+    """Lee el JSON visible (búsqueda y validación todavía mezcladas).
+
+    No filtra el split: eso lo hace `dividir`. Imprime cuántas instancias hay
+    y cuántas restricciones traen en promedio, para calibrar el tamaño de muestra
+    antes de gastar generaciones.
+
+    Parameters
+    ----------
+    ruta:
+        Por defecto `datos_visibles.json` en el directorio de trabajo de Colab.
+    """
     datos = json.load(open(ruta))
     print(
         f"{len(datos)} instancias, "
@@ -124,12 +158,22 @@ def dividir(datos):
 
 
 def ver_prompt(config, instancia):
-    """El texto exacto que el oráculo le mandaría al modelo."""
+    """El texto exacto que el oráculo le mandaría al modelo.
+
+    No genera tokens: solo sustituye los índices de la config por el texto del
+    catálogo y lo pega al prompt de la instancia. Sirve para inspeccionar una
+    config sin gastar una consulta.
+    """
     return armar(config, instancia)
 
 
 def curva(historial):
-    """historial: lista de precisiones. Dibuja la mejor hasta cada consulta."""
+    """historial: lista de precisiones. Dibuja la mejor hasta cada consulta.
+
+    El eje Y no es 'esta config' sino 'el mejor hasta ahora': explorar configs
+    peores no baja la curva, y se ve si el presupuesto extra sigue encontrando
+    mejoras o ya se estancó.
+    """
     import matplotlib.pyplot as plt
 
     mejor = []
@@ -144,6 +188,22 @@ def curva(historial):
 
 
 def entrega(grupo, config, semana, ruta="entrega.json"):
+    """Escribe el JSON de entrega: grupo, config ganadora y semana.
+
+    La nota no sale de `datos_visibles.json`: el profesor corre esta config
+    sobre el test privado. Imprime el JSON y lo deja en disco para descargarlo.
+
+    Parameters
+    ----------
+    grupo:
+        Identificador del grupo, p. ej. ``"G07"``.
+    config:
+        Dict con índices de ranura y ``temperatura``.
+    semana:
+        Número de semana del curso.
+    ruta:
+        Archivo de salida. El notebook lo descarga con ``files.download``.
+    """
     d = {"grupo": grupo, "config": config, "semana": semana}
     json.dump(d, open(ruta, "w"), indent=1)
     print(json.dumps(d, indent=1))

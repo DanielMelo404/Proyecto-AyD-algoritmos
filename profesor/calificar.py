@@ -38,8 +38,12 @@ def registro_ifbench(ruta=RUTA_IFBENCH):
 
 
 def oraculo_test(modelo, ruta_datos, cache, ruta_ifbench=RUTA_IFBENCH):
-    """(oraculo, test) listos para calificar. `datos=test`, así que
-    `oraculo.evaluar(config)` sin más argumentos ya corre las 294."""
+    """(oraculo, test) listos para calificar.
+
+    `datos=test`, así que `oraculo.evaluar(config)` sin más argumentos ya
+    corre las 294. No se pasa partición de validación: acá no se busca,
+    se mide. El registro de IFBench va detrás del de IFEvalG.
+    """
     test = json.load(open(ruta_datos))
     o = Oraculo(modelo, test, cache=cache, registros=[registro_ifbench(ruta_ifbench)])
     print(f"{len(test)} instancias de test, {len({x['familia'] for x in test})} familias")
@@ -47,6 +51,12 @@ def oraculo_test(modelo, ruta_datos, cache, ruta_ifbench=RUTA_IFBENCH):
 
 
 def _tabla_por_familia(trazas, total):
+    """Fallos agrupados por familia, de más a menos frecuentes.
+
+    El denominador es `total` (instancias medidas), no el número de trazas:
+    una familia con 12/294 no es lo mismo que 12/12. `violo` ya trae solo
+    la primera restricción que falló, así que cada instancia cuenta una vez.
+    """
     conteos = {}
     for t in trazas:
         conteos[t["violo"]] = conteos.get(t["violo"], 0) + 1
@@ -56,7 +66,10 @@ def _tabla_por_familia(trazas, total):
 
 def calificar(oraculo, config, semilla=1, n=None):
     """Precisión sobre las 294 (o las primeras `n`) + tabla de fallos por
-    familia. No imprime prompts ni respuestas — para eso está `ver_fallos`.
+    familia.
+
+    `n` sirve para cronometrar una muestra antes de lanzar el test entero.
+    No imprime prompts ni respuestas — para eso está `ver_fallos`.
     """
     instancias = oraculo.datos if n is None else oraculo.datos[:n]
     r = oraculo.evaluar(config, instancias, semilla=semilla, desc="calificando")
@@ -68,8 +81,11 @@ def calificar(oraculo, config, semilla=1, n=None):
 
 
 def ver_fallos(r, n=3):
-    """Mira las trazas de un resultado a propósito. Un output de Colab se
-    comparte por accidente con facilidad — por eso `calificar` no hace esto solo."""
+    """Imprime las primeras `n` trazas (familia + recorte de la salida).
+
+    Un output de Colab se comparte por accidente con facilidad — por eso
+    `calificar` no hace esto solo. Llamarlo a propósito, no en el loop de notas.
+    """
     for t in r.trazas[:n]:
         print("violó:", t["violo"])
         print(t["salida"][:300])

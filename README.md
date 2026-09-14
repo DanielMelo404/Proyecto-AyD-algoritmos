@@ -9,6 +9,8 @@ Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena co
 | Solución NPO · Llama 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_llama3B.ipynb) |
 | Solución NPO · Ministral 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_mistral3B.ipynb) |
 
+Los tres notebooks de solución implementan el **Algoritmo 1** (NPO) de Chang y Chen (2026) [1].
+
 ## Cómo se juega
 
 1. Abran el notebook del curso en Colab (primera fila de la tabla).
@@ -46,7 +48,7 @@ Los 7-8B son lentos en T4: tengan paciencia con las primeras corridas.
 
 ## Búsqueda y validación
 
-`datos_visibles.json` tiene 450 instancias: **150 de búsqueda y 300 de validación**. Son el mismo split que usan [GEPA](https://arxiv.org/abs/2507.19457) y [NPO](https://arxiv.org/abs/2608.27266) sobre IF-RLVR Train, de donde salen estos datos. No son las filas exactas de los papers —no publican los índices—, sí la fuente, los tamaños y la disyunción.
+`datos_visibles.json` tiene 450 instancias: **150 de búsqueda y 300 de validación**. Son el mismo split que usan [GEPA](https://arxiv.org/abs/2507.19457) y NPO [1] sobre IF-RLVR Train, de donde salen estos datos. No son las filas exactas de los papers —no publican los índices—, sí la fuente, los tamaños y la disyunción.
 
 ```
 datos = cargar_datos()
@@ -71,9 +73,9 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 | Archivo | Qué es |
 |---|---|
 | `proyecto_oraculo.ipynb` | El notebook del curso |
-| `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO con `qwen17b` |
-| `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO con `llama3b` |
-| `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO con `ministral3b` |
+| `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO [1] con `qwen17b` |
+| `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO [1] con `llama3b` |
+| `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO [1] con `ministral3b` |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
 | `ayudas.py` | Cargar modelo, datos, dividir, ver un prompt, curva, entrega |
 | `datos_visibles.json` | 450 instancias: 150 de búsqueda, 300 de validación |
@@ -128,3 +130,7 @@ tabla = calificar_entregas(oraculo, CARPETA / "entregas")  # todos los grupos de
 mirar una traza hay que pedirla aparte con `ver_fallos(r)`. El caché queda en Drive:
 una desconexión de Colab no cuesta la corrida, y dos grupos con la misma config sólo se
 generan una vez.
+
+## Referencias
+
+[1] Yuan Chang y Xiaoqi Chen, *Naive Prompt Optimization: Rethinking the Need for Complex Prompt Search*, arXiv:2608.27266, 2026. https://arxiv.org/abs/2608.27266
