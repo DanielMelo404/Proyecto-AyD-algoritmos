@@ -29,7 +29,7 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 72 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
+Hay 144 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
 
 ## Modelos
 
@@ -92,7 +92,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 2, "estrategia": 1, "formato": 1, "verificacion": 1, "temperatura": 0.0},
+ "config": {"rol": 2, "estrategia": 1, "formato": 1, "verificacion": 1, "recordatorio": 1, "temperatura": 0.0},
  "semana": 3
 }
 ```

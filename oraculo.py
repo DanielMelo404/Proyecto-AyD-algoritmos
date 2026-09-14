@@ -38,7 +38,8 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
 # Cada ranura de la config es un índice en su lista. "" = no poner nada.
-# rol / estrategia / formato se pegan ANTES del prompt; verificacion, DESPUÉS.
+# rol / estrategia / formato se pegan ANTES del prompt; verificacion y
+# recordatorio, DESPUÉS.
 
 CATALOGO = {
     "rol": [
@@ -62,11 +63,17 @@ CATALOGO = {
         "",
         "Before finishing, verify that your answer satisfies every requirement.",
     ],
+    # La única ranura que no es texto fijo: `{restricciones}` se rellena con las
+    # de la instancia. Lo arma `_recordatorio`, no `armar`.
+    "recordatorio": [
+        "",
+        "These are the requirements your response must satisfy:\n{restricciones}",
+    ],
 }
 
 TEMPERATURAS = [0.0, 0.3, 0.7]
 
-RANURAS = ["rol", "estrategia", "formato", "verificacion"]
+RANURAS = ["rol", "estrategia", "formato", "verificacion", "recordatorio"]
 
 # Presupuesto de un lote, en lote × largo². El prefill materializa una matriz de
 # atención de lote × cabezas × largo² valores, así que el tope no puede ser solo
@@ -81,9 +88,9 @@ PERIODO_GUARDADO = 60
 def espacio(temperaturas=(0.0,)):
     """Producto cartesiano de los índices del catálogo × temperaturas.
 
-    Por defecto temperatura fija en 0.0 → 3×4×3×2 = 72 configs. Pasar
-    `TEMPERATURAS` (0.0, 0.3, 0.7) triplea el espacio. Cada config es un
-    dict ``{rol, estrategia, formato, verificacion, temperatura}``.
+    Por defecto temperatura fija en 0.0 → 3×4×3×2×2 = 144 configs. Pasar
+    `TEMPERATURAS` (0.0, 0.3, 0.7) triplea el espacio. Cada config es un dict
+    ``{rol, estrategia, formato, verificacion, recordatorio, temperatura}``.
     """
     tamanos = [range(len(CATALOGO[r])) for r in RANURAS]
     return [
@@ -92,18 +99,48 @@ def espacio(temperaturas=(0.0,)):
     ]
 
 
+def _recordatorio(config, instancia):
+    """Repite al final las restricciones que el prompt ya trae.
+
+    `restriccion` viene separada por tabuladores, una por restricción y
+    verbatim: es el mismo texto que el verificador va a medir, no una
+    paráfrasis. Si la instancia no la trae, no se pega nada — hay conjuntos
+    (los ocultos) donde el campo viene vacío.
+
+    Una restricción puede ocupar varias líneas (las que traen un ejemplo de
+    formato). Se copian tal cual, sin sangrar la continuación: el verificador
+    busca marcadores exactos y sangrarlos invitaría al modelo a emitirlos con
+    espacios de más.
+    """
+    plantilla = CATALOGO["recordatorio"][config.get("recordatorio", 0)]
+    if not plantilla:
+        return ""
+    crudo = instancia.get("restriccion") or ""
+    partes = [p.strip() for p in crudo.split("\t") if p.strip()]
+    if not partes:
+        return ""
+    return plantilla.format(restricciones="\n".join(f"- {p}" for p in partes))
+
+
 def armar(config, instancia):
     """Pega las ranuras no vacías alrededor del prompt de la instancia.
 
-    rol / estrategia / formato van **antes**; verificacion va **después**.
-    Los strings vacíos del catálogo se omiten para no meter líneas en blanco
-    que el modelo pueda leer como parte de la tarea.
+    rol / estrategia / formato van **antes**; verificacion y recordatorio van
+    **después**, en ese orden: el recordatorio queda lo más cerca posible de la
+    generación, que es de donde saca su efecto. Los strings vacíos del catálogo
+    se omiten para no meter líneas en blanco que el modelo lea como tarea.
+
+    `config` sin la ranura `recordatorio` se acepta: una entrega vieja de cinco
+    llaves tiene que seguir calificando.
     """
     cabeza = [CATALOGO[r][config[r]] for r in ("rol", "estrategia", "formato")]
     cola = CATALOGO["verificacion"][config["verificacion"]]
     partes = [t for t in cabeza if t] + [instancia["prompt"]]
     if cola:
         partes.append(cola)
+    recordatorio = _recordatorio(config, instancia)
+    if recordatorio:
+        partes.append(recordatorio)
     return "\n\n".join(partes)
 
 
