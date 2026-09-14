@@ -112,7 +112,7 @@ class Resultado:
 class Oraculo:
     def __init__(
         self, modelo, datos, validacion=None, cache="cache_oraculo.json",
-        max_new_tokens=384, lote=8,
+        max_new_tokens=384, lote=8, registros=None,
     ):
         self.model = modelo.red
         self.tok = modelo.tok
@@ -123,6 +123,10 @@ class Oraculo:
         random.Random(0).shuffle(self.validacion)
         self.max_new_tokens = max_new_tokens
         self.lote = lote
+        # Cadena de registros de verificadores, en orden de consulta. El de IFEvalG
+        # va primero y cubre las familias de datos_visibles.json; quien califique
+        # con otras familias agrega su registro detrás.
+        self.registros = [_REG.INSTRUCTION_DICT, *(registros or [])]
 
         self.tok.pad_token = self.tok.pad_token or self.tok.eos_token
         self.tok.padding_side = "left"  # necesario para generar por lotes
@@ -233,10 +237,16 @@ class Oraculo:
             barra.close()
         return salidas
 
+    def _clase(self, iid):
+        for reg in self.registros:
+            if iid in reg:
+                return reg[iid]
+        raise KeyError(f"ningún registro conoce {iid!r}")
+
     def _verificar(self, instancia, respuesta):
         """(1, None) si cumple todo; (0, familia) si falla alguna."""
         for iid, kw in zip(instancia["ids"], instancia["kwargs"]):
-            c = _REG.INSTRUCTION_DICT[iid](iid)
+            c = self._clase(iid)(iid)
             c.build_description(**kw)
             args = c.get_instruction_args()
             if args and "prompt" in args:
