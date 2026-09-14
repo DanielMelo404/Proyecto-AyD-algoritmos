@@ -3,7 +3,7 @@ ayudas.py — funciones que el estudiante sí puede leer.
 
     from ayudas import cargar_modelo, cargar_datos, dividir, ver_prompt, curva, entrega
 
-    modelo = cargar_modelo("pequeno")
+    modelo = cargar_modelo("qwen17b")
     datos = cargar_datos()
     busqueda, validacion = dividir(datos)
 """
@@ -14,7 +14,7 @@ from oraculo import armar
 
 
 MODELOS = {
-    "pequeno": "Qwen/Qwen3-1.7B",
+    "qwen17b": "Qwen/Qwen3-1.7B",
     # El repo por defecto de Ministral 3 es FP8: la T4 (sm_75) no lo soporta.
     "ministral3b": "mistralai/Ministral-3-3B-Instruct-2512-BF16",
     "llama3b": "unsloth/Llama-3.2-3B-Instruct",
@@ -69,7 +69,7 @@ def _cargar_red(nombre, kwargs):
         return AutoModelForImageTextToText.from_pretrained(nombre, **kwargs)
 
 
-def cargar_modelo(modelo="pequeno"):
+def cargar_modelo(modelo="qwen17b"):
     """Carga un alias (ver `MODELOS`) o un id público de HF.
 
     `token=False`: nunca pide login. Todos los checkpoints son públicos.

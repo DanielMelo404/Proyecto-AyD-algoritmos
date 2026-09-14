@@ -32,7 +32,7 @@ Hay 72 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
 
 | Alias | Checkpoint | Notas |
 |---|---|---|
-| `pequeno` | `Qwen/Qwen3-1.7B` | el de ahora; más adelante se retira |
+| `qwen17b` | `Qwen/Qwen3-1.7B` | el de por defecto; el más rápido |
 | `ministral3b` | `mistralai/Ministral-3-3B-Instruct-2512-BF16` | 3.8B en fp16 (~7.7 GB), T4 |
 | `llama3b` | `unsloth/Llama-3.2-3B-Instruct` | 3.2B en fp16 (~6.4 GB), T4 |
 | `qwen8b` | `unsloth/Qwen3-8B-unsloth-bnb-4bit` | 4-bit, T4 |
@@ -71,7 +71,7 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 | Archivo | Qué es |
 |---|---|
 | `proyecto_oraculo.ipynb` | El notebook del curso |
-| `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO con `pequeno` (Qwen3 1.7B) |
+| `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO con `qwen17b` |
 | `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO con `llama3b` |
 | `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO con `ministral3b` |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |

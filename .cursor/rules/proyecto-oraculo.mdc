@@ -12,7 +12,7 @@ Students may call `evaluar` and `validar` as many times as they want. Never add 
 Keep the student path to four lines before their cell:
 
 ```
-modelo = cargar_modelo("pequeno")
+modelo = cargar_modelo("qwen17b")
 datos = cargar_datos()
 busqueda, validacion = dividir(datos)
 oraculo = Oraculo(modelo, busqueda, validacion)
