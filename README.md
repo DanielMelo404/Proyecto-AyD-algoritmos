@@ -5,11 +5,13 @@ Curso de Análisis y Diseño de Algoritmos. El trabajo es encontrar una buena co
 | Notebook | Colab |
 |---|---|
 | Proyecto (estudiantes) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo.ipynb) |
+| Solución Backtracking | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_backtracking.ipynb) |
 | Solución NPO · Qwen 1.7B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_qwen17B.ipynb) |
 | Solución NPO · Llama 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_llama3B.ipynb) |
 | Solución NPO · Ministral 3B | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DanielMelo404/Proyecto-AyD-algoritmos/blob/main/proyecto_oraculo_solucion_NPO_mistral3B.ipynb) |
 
-Los tres notebooks de solución implementan el **Algoritmo 1** (NPO) de Chang y Chen (2026) [1].
+Los tres notebooks NPO implementan el **Algoritmo 1** de Chang y Chen (2026) [1]. El de
+backtracking es la otra solución de ejemplo: recorre el catálogo con poda, sin teacher.
 
 ## Cómo se juega
 
@@ -73,6 +75,7 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 | Archivo | Qué es |
 |---|---|
 | `proyecto_oraculo.ipynb` | El notebook del curso |
+| `proyecto_oraculo_solucion_backtracking.ipynb` | Ejemplo de backtracking con poda, sobre `qwen17b` |
 | `proyecto_oraculo_solucion_NPO_qwen17B.ipynb` | Ejemplo NPO [1] con `qwen17b` |
 | `proyecto_oraculo_solucion_NPO_llama3B.ipynb` | Ejemplo NPO [1] con `llama3b` |
 | `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO [1] con `ministral3b` |
