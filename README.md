@@ -29,7 +29,7 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 6400 configuraciones (`espacio()`, temperatura 0.0). En cada ranura solo el último índice es seguro; el resto pega un extra que el verificador rechaza, detrás de la petición. Diez configs al azar se quedan cerca de 0%; llegar a ~30% exige quitar esas dañinas. Ustedes deciden cuántas instancias medir; 20 bastan para ver pasos de 5%.
+Hay 1024 configuraciones (`espacio()`, temperatura 0.0): un índice por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook está fijo en 40 instancias. Medir con cuántas instancias buscar es parte del problema.
 
 ## Modelos
 
@@ -92,7 +92,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 3, "estrategia": 3, "formato": 4, "estilo": 4, "verificacion": 3, "recordatorio": 3, "temperatura": 0.0},
+ "config": {"rol": 3, "estrategia": 3, "formato": 3, "estilo": 3, "cierre": 3, "temperatura": 0.0},
  "semana": 3
 }
 ```
@@ -109,6 +109,8 @@ restricciones que no están ahí. Los archivos están en `profesor/`:
 | `profesor/calificar.ipynb` | Notebook para poner nota |
 | `profesor/calificar.py` | `calificar` y `calificar_entregas` |
 | `profesor/datos_test.json` | Las 294 instancias del test |
+
+`calibracion.ipynb` (raíz del repo) se corre una vez en Colab, con `qwen17b`, antes de soltar el catálogo: barrido por ranura, piso, techo y ascenso por coordenadas.
 
 `datos_ocultos.json` y los scripts de preparación no entran a git.
 
