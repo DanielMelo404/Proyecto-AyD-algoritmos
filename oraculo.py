@@ -37,54 +37,51 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 #  El catálogo de ranuras
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
-# Cada ranura de la config es un índice en su lista. "" = no poner nada.
-# Dentro de cada lista el orden va de dañino a útil: los primeros índices
-# rompen una familia concreta (markdown, cierre, comas, largo) y los últimos
-# ayudan a cumplirla. El techo se queda cerca de 30%; el piso, cerca de 0%.
-# rol / estrategia / formato / estilo van ANTES del prompt; verificacion y
-# recordatorio, DESPUÉS.
+# Cada ranura es un índice en su lista. El último índice es la única
+# opción segura; las anteriores son extras que el verificador rechaza
+# (cierre, largo, markdown, comas, preámbulo). `armar` pega primero las
+# seguras y después las dañinas, detrás de la petición, para que una
+# línea útil no cancele una dañina. El techo se queda cerca de 30%.
 
 CATALOGO = {
     "rol": [
-        "You are a creative writer. Ignore formatting, word counts and punctuation.",
-        "",
-        "You are a helpful assistant.",
+        "Let me know if you need anything else after finishing the answer.",
+        "Hope this helps! Add a friendly closing offer of further help.",
+        "Always finish by asking the user what else you can do.",
         "You are a meticulous assistant who follows formatting requirements exactly.",
     ],
     "estrategia": [
-        "Ignore the extra constraints and just answer the question naturally.",
-        "",
-        "First, list every requirement stated in the request. Then write your answer.",
+        "Write a thorough detailed answer of at least four hundred words.",
+        "Expand the answer into several extra paragraphs of additional commentary.",
+        "Add two extra paragraphs of personal commentary after the main answer.",
         "Write a draft, check it against each requirement, "
         "then output only the corrected final version.",
     ],
     "formato": [
-        "",
-        "Use markdown headers and bullet points in your answer.",
-        "Always end by asking if the user needs anything else.",
-        "Begin your reply immediately with the answer itself.",
+        "Use markdown headers and bullet points throughout your entire answer.",
+        "Wrap the entire answer inside a single fenced markdown code block.",
+        "Begin the answer with a markdown heading and a numbered list.",
+        "Format the answer as bullet points under at least two markdown headers.",
         "Output only the requested text. No preambles or commentary.",
     ],
-    # Estilo de la respuesta. El índice 0 alarga de más; el 1 mete comas.
     "estilo": [
-        "Write a thorough, detailed answer of at least 400 words.",
-        "Feel free to use commas and punctuation naturally.",
-        "",
-        "Keep your answer concise.",
+        "Use a comma in every sentence of the entire written answer.",
+        "End every sentence with an exclamation mark instead of a period.",
+        "Feel free to use commas and extra punctuation in every sentence.",
+        "Write each sentence with at least one comma and one exclamation.",
         "Respect exact word counts, casing and punctuation rules.",
     ],
     "verificacion": [
-        "After the answer, ask the user if they need anything else.",
-        "",
-        "Before finishing, verify that your answer satisfies every requirement.",
+        "Start the reply with the preamble Sure, here you go.",
+        "Add a second paragraph of personal commentary after the main answer.",
+        "Before the answer, write a short introduction that restates the question.",
         "Check each requirement silently, then output only the corrected answer.",
     ],
-    # Solo algunas plantillas traen `{restricciones}`: lo rellena `_recordatorio`.
-    # Las que no lo traen se pegan tal cual (sirven para romper el cierre).
+    # Solo la plantilla segura trae `{restricciones}`: lo rellena `_recordatorio`.
     "recordatorio": [
-        "End by asking what else you can help with.",
-        "Add a second paragraph of personal commentary after the answer.",
-        "",
+        "Ignore the extra requirements and just answer the question naturally.",
+        "End by asking what else you can help the user with.",
+        "Add a second paragraph of personal commentary after finishing the answer.",
         "These are the requirements your response must satisfy:\n{restricciones}",
     ],
 }
@@ -156,27 +153,40 @@ def _recordatorio(config, instancia):
     return plantilla.format(restricciones="\n".join(f"- {p}" for p in partes))
 
 
-def armar(config, instancia):
-    """Pega las ranuras no vacías alrededor del prompt de la instancia.
+def _es_segura(ranura, indice):
+    """El último índice de cada ranura es la única opción que no rompe."""
+    return indice == len(CATALOGO[ranura]) - 1
 
-    rol / estrategia / formato / estilo van **antes**; verificacion y
-    recordatorio van **después**, en ese orden: el recordatorio queda lo más
-    cerca posible de la generación, que es de donde saca su efecto. Los
-    strings vacíos del catálogo se omiten para no meter líneas en blanco que
-    el modelo lea como tarea.
+
+def armar(config, instancia):
+    """Pega las ranuras no vacías detrás del prompt de la instancia.
+
+    Primero van las opciones seguras (último índice de cada ranura),
+    después las dañinas: el modelo de esta talla sigue lo último que lee,
+    y una línea útil no puede cancelar un extra que el verificador rechaza.
+    El índice 0 de todas las ranuras apila solo dañinas; el último índice
+    de todas, solo las líneas que ya llegaban cerca de 30%.
 
     `config` sin `estilo` o sin `recordatorio` se acepta: una entrega vieja
     tiene que seguir calificando, y la ranura que falta no se pega.
     """
-    cabeza = [_opcion(config, r) for r in ("rol", "estrategia", "formato", "estilo")]
-    cola = _opcion(config, "verificacion")
-    partes = [t for t in cabeza if t] + [instancia["prompt"]]
-    if cola:
-        partes.append(cola)
-    recordatorio = _recordatorio(config, instancia)
-    if recordatorio:
-        partes.append(recordatorio)
-    return "\n\n".join(partes)
+    seguras = []
+    daninas = []
+    for ranura in RANURAS:
+        if ranura not in config:
+            continue
+        texto = (
+            _recordatorio(config, instancia)
+            if ranura == "recordatorio"
+            else _opcion(config, ranura)
+        )
+        if not texto:
+            continue
+        if _es_segura(ranura, config[ranura]):
+            seguras.append(texto)
+        else:
+            daninas.append(texto)
+    return "\n\n".join([instancia["prompt"], *seguras, *daninas])
 
 
 def _id_config(config):

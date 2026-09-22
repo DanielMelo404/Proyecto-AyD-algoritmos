@@ -29,7 +29,7 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 6400 configuraciones (`espacio()`, temperatura 0.0). El catálogo va de opciones que rompen una familia de restricciones a opciones que ayudan a cumplirla: una config mala queda cerca de 0% y una buena cerca de 30%. Ustedes deciden cuántas instancias medir; 20 bastan para ver pasos de 5%.
+Hay 6400 configuraciones (`espacio()`, temperatura 0.0). En cada ranura solo el último índice es seguro; el resto pega un extra que el verificador rechaza, detrás de la petición. Diez configs al azar se quedan cerca de 0%; llegar a ~30% exige quitar esas dañinas. Ustedes deciden cuántas instancias medir; 20 bastan para ver pasos de 5%.
 
 ## Modelos
 
