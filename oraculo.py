@@ -38,34 +38,52 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
 # Cada ranura de la config es un índice en su lista. "" = no poner nada.
-# rol / estrategia / formato se pegan ANTES del prompt; verificacion y
+# Dentro de cada lista el orden va de dañino a útil: los primeros índices
+# rompen una familia concreta (markdown, cierre, comas, largo) y los últimos
+# ayudan a cumplirla. El techo se queda cerca de 30%; el piso, cerca de 0%.
+# rol / estrategia / formato / estilo van ANTES del prompt; verificacion y
 # recordatorio, DESPUÉS.
 
 CATALOGO = {
     "rol": [
+        "You are a creative writer. Ignore formatting, word counts and punctuation.",
         "",
         "You are a helpful assistant.",
         "You are a meticulous assistant who follows formatting requirements exactly.",
     ],
     "estrategia": [
+        "Ignore the extra constraints and just answer the question naturally.",
         "",
-        "Think step by step before answering.",
         "First, list every requirement stated in the request. Then write your answer.",
         "Write a draft, check it against each requirement, "
         "then output only the corrected final version.",
     ],
     "formato": [
         "",
-        "Output only the requested text. Do not add explanations, preambles or commentary.",
+        "Use markdown headers and bullet points in your answer.",
+        "Always end by asking if the user needs anything else.",
         "Begin your reply immediately with the answer itself.",
+        "Output only the requested text. No preambles or commentary.",
+    ],
+    # Estilo de la respuesta. El índice 0 alarga de más; el 1 mete comas.
+    "estilo": [
+        "Write a thorough, detailed answer of at least 400 words.",
+        "Feel free to use commas and punctuation naturally.",
+        "",
+        "Keep your answer concise.",
+        "Respect exact word counts, casing and punctuation rules.",
     ],
     "verificacion": [
+        "After the answer, ask the user if they need anything else.",
         "",
         "Before finishing, verify that your answer satisfies every requirement.",
+        "Check each requirement silently, then output only the corrected answer.",
     ],
-    # La única ranura que no es texto fijo: `{restricciones}` se rellena con las
-    # de la instancia. Lo arma `_recordatorio`, no `armar`.
+    # Solo algunas plantillas traen `{restricciones}`: lo rellena `_recordatorio`.
+    # Las que no lo traen se pegan tal cual (sirven para romper el cierre).
     "recordatorio": [
+        "End by asking what else you can help with.",
+        "Add a second paragraph of personal commentary after the answer.",
         "",
         "These are the requirements your response must satisfy:\n{restricciones}",
     ],
@@ -73,7 +91,7 @@ CATALOGO = {
 
 TEMPERATURAS = [0.0, 0.3, 0.7]
 
-RANURAS = ["rol", "estrategia", "formato", "verificacion", "recordatorio"]
+RANURAS = ["rol", "estrategia", "formato", "estilo", "verificacion", "recordatorio"]
 
 # Presupuesto de un lote, en lote × largo². El prefill materializa una matriz de
 # atención de lote × cabezas × largo² valores, así que el tope no puede ser solo
@@ -88,9 +106,9 @@ PERIODO_GUARDADO = 60
 def espacio(temperaturas=(0.0,)):
     """Producto cartesiano de los índices del catálogo × temperaturas.
 
-    Por defecto temperatura fija en 0.0 → 3×4×3×2×2 = 144 configs. Pasar
-    `TEMPERATURAS` (0.0, 0.3, 0.7) triplea el espacio. Cada config es un dict
-    ``{rol, estrategia, formato, verificacion, recordatorio, temperatura}``.
+    Por defecto temperatura fija en 0.0 → 4×4×5×5×4×4 = 6400 configs. Pasar
+    `TEMPERATURAS` (0.0, 0.3, 0.7) triplica el espacio. Cada config es un dict
+    ``{rol, estrategia, formato, estilo, verificacion, recordatorio, temperatura}``.
     """
     tamanos = [range(len(CATALOGO[r])) for r in RANURAS]
     return [
@@ -99,22 +117,38 @@ def espacio(temperaturas=(0.0,)):
     ]
 
 
+def _opcion(config, ranura):
+    """Texto de esa ranura. Una llave ausente no pega nada.
+
+    Una entrega anterior a `estilo` (o a `recordatorio`) sigue armando el
+    prompt de antes: la ranura que no trae equivale al vacío del catálogo,
+    no al índice 0, que ahora puede ser una opción dañina.
+    """
+    if ranura not in config:
+        return ""
+    return CATALOGO[ranura][config[ranura]]
+
+
 def _recordatorio(config, instancia):
     """Repite al final las restricciones que el prompt ya trae.
 
     `restriccion` viene separada por tabuladores, una por restricción y
     verbatim: es el mismo texto que el verificador va a medir, no una
-    paráfrasis. Si la instancia no la trae, no se pega nada — hay conjuntos
-    (los ocultos) donde el campo viene vacío.
+    paráfrasis. Si la instancia no la trae, no se pega la plantilla que
+    depende de `{restricciones}` — hay conjuntos (los ocultos) donde el
+    campo viene vacío. Una plantilla sin ese hueco se pega igual: es una
+    instrucción de cierre, no un recordatorio de la instancia.
 
     Una restricción puede ocupar varias líneas (las que traen un ejemplo de
     formato). Se copian tal cual, sin sangrar la continuación: el verificador
     busca marcadores exactos y sangrarlos invitaría al modelo a emitirlos con
     espacios de más.
     """
-    plantilla = CATALOGO["recordatorio"][config.get("recordatorio", 0)]
+    plantilla = _opcion(config, "recordatorio")
     if not plantilla:
         return ""
+    if "{restricciones}" not in plantilla:
+        return plantilla
     crudo = instancia.get("restriccion") or ""
     partes = [p.strip() for p in crudo.split("\t") if p.strip()]
     if not partes:
@@ -125,16 +159,17 @@ def _recordatorio(config, instancia):
 def armar(config, instancia):
     """Pega las ranuras no vacías alrededor del prompt de la instancia.
 
-    rol / estrategia / formato van **antes**; verificacion y recordatorio van
-    **después**, en ese orden: el recordatorio queda lo más cerca posible de la
-    generación, que es de donde saca su efecto. Los strings vacíos del catálogo
-    se omiten para no meter líneas en blanco que el modelo lea como tarea.
+    rol / estrategia / formato / estilo van **antes**; verificacion y
+    recordatorio van **después**, en ese orden: el recordatorio queda lo más
+    cerca posible de la generación, que es de donde saca su efecto. Los
+    strings vacíos del catálogo se omiten para no meter líneas en blanco que
+    el modelo lea como tarea.
 
-    `config` sin la ranura `recordatorio` se acepta: una entrega vieja de cinco
-    llaves tiene que seguir calificando.
+    `config` sin `estilo` o sin `recordatorio` se acepta: una entrega vieja
+    tiene que seguir calificando, y la ranura que falta no se pega.
     """
-    cabeza = [CATALOGO[r][config[r]] for r in ("rol", "estrategia", "formato")]
-    cola = CATALOGO["verificacion"][config["verificacion"]]
+    cabeza = [_opcion(config, r) for r in ("rol", "estrategia", "formato", "estilo")]
+    cola = _opcion(config, "verificacion")
     partes = [t for t in cabeza if t] + [instancia["prompt"]]
     if cola:
         partes.append(cola)

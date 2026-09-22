@@ -29,7 +29,7 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 144 configuraciones (`espacio()`). Ustedes deciden cuántas instancias medir.
+Hay 6400 configuraciones (`espacio()`, temperatura 0.0). El catálogo va de opciones que rompen una familia de restricciones a opciones que ayudan a cumplirla: una config mala queda cerca de 0% y una buena cerca de 30%. Ustedes deciden cuántas instancias medir; 20 bastan para ver pasos de 5%.
 
 ## Modelos
 
@@ -92,7 +92,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 2, "estrategia": 1, "formato": 1, "verificacion": 1, "recordatorio": 1, "temperatura": 0.0},
+ "config": {"rol": 3, "estrategia": 3, "formato": 4, "estilo": 4, "verificacion": 3, "recordatorio": 3, "temperatura": 0.0},
  "semana": 3
 }
 ```
