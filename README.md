@@ -30,11 +30,11 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 1024 configuraciones (`espacio()`, temperatura 0.0): un índice por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook está fijo en 100 instancias. Medir con cuántas instancias buscar es parte del problema.
+Hay **32 768** configuraciones (`espacio()`, temperatura 0.0): un índice de 0 a 7 por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook son las 100 instancias de `busqueda`. Medir con cuántas instancias buscar es parte del problema.
 
-**Es un problema de optimización de verdad.** Cada ranura ataca una parte distinta de la respuesta —el prefijo, el largo, la estructura, los caracteres, el sufijo— y los efectos se componen. Una configuración al azar se queda cerca del **1%**; el techo del lote de búsqueda está cerca del **24%**. Sortear configuraciones no alcanza: con 60 consultas la búsqueda aleatoria se estanca alrededor del 13%. Para pasar de ahí hay que usar la estructura — leer las trazas, ver qué familia rompe cada opción, y buscar con eso (backtracking con poda, ascenso por coordenadas, haz, recocido). Reparar una ranura a la vez sube de a escalones; ninguna opción buena está en el mismo índice en todas las ranuras.
+**Es un problema de optimización de verdad.** Cada ranura ataca una parte distinta de la respuesta —el prefijo, el largo, la estructura, los caracteres, el sufijo— y los efectos se componen. Una configuración al azar se queda **debajo del 5%**; el techo está cerca del **24%**. Sortear no alcanza: hay **una sola opción limpia entre ocho** en cada ranura, así que acertar cuatro de cinco ranuras al azar pasa 1 vez cada 900. Para pasar de ahí hay que usar la estructura — leer las trazas, ver qué familia rompe cada opción, y buscar con eso (backtracking con poda, ascenso por coordenadas, haz, recocido). Reparar una ranura a la vez sube de a escalones; ninguna opción buena está en el mismo índice en todas las ranuras.
 
-El lote de medición lo arma `lote_busqueda(busqueda)`, no `busqueda[:100]`. Las instancias de **una sola restricción** son a la vez las que el modelo acierta y las que casi ninguna opción logra romper, así que un lote lleno de ellas mide un piso alto y aplana el paisaje. El lote mezcla 15 de esas con 85 de dos o más restricciones: el techo baja de ~30% a ~24% y a cambio hay por dónde optimizar.
+Las particiones vienen **curadas**. `datos_visibles.json` marca como `descartada` a la instancia que pide más texto del que cabe en `max_new_tokens`, a la que ninguna opción puede romper, y a las de una o de cuatro-cinco restricciones. Las primeras son imposibles de acertar; las segundas son puntos que nadie puede perder, y con un tercio del lote así el puntaje casi no dependía de la configuración elegida. Búsqueda y validación quedan con la misma dificultad (2.5 restricciones por instancia), para que validar mida generalización y no un lote más duro.
 
 ## Modelos
 
@@ -57,7 +57,7 @@ Los 7-8B son lentos en T4: tengan paciencia con las primeras corridas.
 
 ## Búsqueda y validación
 
-`datos_visibles.json` tiene 450 instancias: **150 de búsqueda y 300 de validación**. Son el mismo split que usan [GEPA](https://arxiv.org/abs/2507.19457) y NPO [1] sobre IF-RLVR Train, de donde salen estos datos. No son las filas exactas de los papers —no publican los índices—, sí la fuente, los tamaños y la disyunción.
+`datos_visibles.json` tiene 450 instancias, de las que se usan **100 de búsqueda y 87 de validación** (el resto va marcado `descartada`, ver `dividir`). Son el mismo split que usan [GEPA](https://arxiv.org/abs/2507.19457) y NPO [1] sobre IF-RLVR Train, de donde salen estos datos. No son las filas exactas de los papers —no publican los índices—, sí la fuente, los tamaños y la disyunción.
 
 ```
 datos = cargar_datos()
@@ -89,8 +89,8 @@ Una instancia trae **hasta 5 restricciones** (2.3 en promedio) y se puntúa todo
 | `proyecto_oraculo_solucion_NPO_mistral3B.ipynb` | Ejemplo NPO [1] con `ministral3b` |
 | `proyecto_oraculo_solucion_NPO_qwen8B.ipynb` | Ejemplo NPO [1] con `qwen8b` |
 | `oraculo.py` | La caja negra. Se consulta, no se abre |
-| `ayudas.py` | Cargar modelo, datos, dividir, armar el lote, ver un prompt, curva, entrega |
-| `datos_visibles.json` | 450 instancias: 150 de búsqueda, 300 de validación |
+| `ayudas.py` | Cargar modelo, datos, dividir, ver un prompt, curva, entrega |
+| `datos_visibles.json` | 450 instancias: 100 de búsqueda, 87 de validación, 263 descartadas |
 
 ## Entrega
 
@@ -99,7 +99,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 2, "estrategia": 1, "formato": 3, "estilo": 0, "cierre": 2, "temperatura": 0.0},
+ "config": {"rol": 2, "estrategia": 7, "formato": 4, "estilo": 1, "cierre": 6, "temperatura": 0.0},
  "semana": 3
 }
 ```

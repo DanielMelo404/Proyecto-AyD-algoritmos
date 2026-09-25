@@ -145,71 +145,31 @@ def cargar_datos(ruta="datos_visibles.json"):
 
 
 def dividir(datos):
-    """(busqueda, validacion) — particiones disjuntas del mismo pool.
+    """(busqueda, validacion) — particiones disjuntas y **curadas** del pool.
 
-    El split viene marcado en los datos. Las dos mitades comparten distribución:
-    validar mide si la config aguanta instancias nuevas, no restricciones de un
-    tipo nuevo (ese salto se mide al calificar, con familias que no están aquí).
+    El split viene marcado en los datos. Las dos mitades comparten distribución
+    (mismo promedio de restricciones por instancia), así que validar mide si la
+    config aguanta instancias nuevas y no un lote más difícil.
+
+    El archivo trae además instancias marcadas `descartada`, que ninguna de las
+    dos particiones usa. Se sacaron porque rompían la medición, no por difíciles:
+
+    - piden más texto del que caben en `max_new_tokens` (imposibles de acertar),
+    - ninguna opción del catálogo puede romperlas (puntos que nadie puede perder),
+    - traen una sola restricción (el modelo las acierta siempre y nada las toca),
+    - traen cuatro o cinco (el modelo casi nunca las acierta, no informan).
+
+    Sin esa curaduría el puntaje casi no dependía de la configuración elegida,
+    que es justo lo que el ejercicio tiene que medir.
     """
     busqueda = [x for x in datos if x["split"] == "busqueda"]
     validacion = [x for x in datos if x["split"] == "validacion"]
+    descartadas = sum(1 for x in datos if x["split"] == "descartada")
     print(f"búsqueda: {len(busqueda)} inst, {_promedio_restricciones(busqueda):.1f} restr/inst")
     print(f"validación: {len(validacion)} inst, {_promedio_restricciones(validacion):.1f} restr/inst")
+    if descartadas:
+        print(f"({descartadas} instancias descartadas: no medían nada — ver `dividir`)")
     return busqueda, validacion
-
-
-def lote_busqueda(busqueda, n=100, faciles=15, semilla=0):
-    """Lote fijo de medición: mezcla deliberada de instancias fáciles y difíciles.
-
-    No es `busqueda[:n]`. Las instancias de **una sola restricción** son las que
-    el modelo acierta casi siempre y, a la vez, las que casi ninguna opción del
-    catálogo logra romper (una ranura cubre el 24% de ellas, contra el 50-63% de
-    las de dos o tres restricciones). Un lote dominado por ellas mide un techo
-    alto y un piso alto: todas las configuraciones se parecen y no hay nada que
-    optimizar.
-
-    Por eso el lote lleva solo `faciles` instancias de una restricción — las
-    justas para que el techo se note — y el resto de dos o más. El techo baja
-    (~24% en vez de ~30%) y a cambio el piso llega al suelo y la búsqueda tiene
-    por dónde subir.
-
-    La mezcla es fija: la misma `semilla` devuelve el mismo lote, para que dos
-    configuraciones se comparen sobre las mismas instancias.
-
-    Parameters
-    ----------
-    busqueda:
-        Partición de búsqueda de `dividir`.
-    n:
-        Tamaño del lote. 100 da pasos de 1%; con menos, el fondo se lee como 0.
-    faciles:
-        Cuántas instancias de una sola restricción entran.
-    semilla:
-        Fija qué instancias se eligen dentro de cada grupo.
-    """
-    import random
-
-    una = [x for x in busqueda if len(x["ids"]) == 1]
-    varias = [x for x in busqueda if len(x["ids"]) > 1]
-    rng = random.Random(semilla)
-    rng.shuffle(una)
-    rng.shuffle(varias)
-
-    faltan_dificiles = n - faciles
-    if len(una) < faciles or len(varias) < faltan_dificiles:
-        raise ValueError(
-            f"la partición no alcanza: hay {len(una)} instancias de una "
-            f"restricción y {len(varias)} de varias; se pidieron "
-            f"{faciles} y {faltan_dificiles}"
-        )
-    lote = una[:faciles] + varias[:faltan_dificiles]
-    rng.shuffle(lote)  # que el orden no agrupe por dificultad
-    print(
-        f"lote de búsqueda: {len(lote)} instancias "
-        f"({faciles} de una restricción, {faltan_dificiles} de dos o más), "
-        f"{_promedio_restricciones(lote):.1f} restr/inst"
-    )
-    return lote
 
 
 def ver_prompt(config, instancia):

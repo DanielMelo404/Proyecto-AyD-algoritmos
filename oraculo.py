@@ -38,6 +38,13 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
 #
+# **Ocho opciones por ranura, una sola limpia.** No es decoración: con cuatro
+# opciones, 60 sorteos encuentran una config con a lo sumo una ranura mal el
+# 61% de las veces, y como las cinco ranuras se reparten el lote, una ranura
+# mal no puede costar más del ~20% del techo. El sorteo aterrizaba en el 80%
+# del techo hiciera lo que hiciera el catálogo. Con ocho opciones esa
+# probabilidad cae al 6% y la búsqueda informada recupera su ventaja.
+#
 # Cada ranura ataca una **superficie** distinta de la respuesta, y las opciones
 # dañinas son directivas sobre la forma literal de la salida, no consejos de
 # tono: un 1.7B obedece «empezá con "Happy to help!"» y no obedece «sé cálido»,
@@ -49,16 +56,10 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 #   estilo     → CARACTERES  puntuación y mayúsculas
 #   cierre     → SUFIJO      texto obligatorio después de la respuesta
 #
-# Cada superficie cubre ~50% del lote y se solapa a la mitad con una vecina.
-# El solape parcial es el punto: con superficies disjuntas el daño se compone
-# pero cada opción sola es leve y el sorteo encuentra configs buenas; con
-# superficies iguales cada opción es letal pero el daño no se suma y no queda
-# gradiente por donde subir. A la mitad se tienen las dos cosas — el piso cae
-# a ~1% y reparar una ranura a la vez sube de a escalones hasta el techo.
-#
-# Las tres opciones dañinas de cada ranura son potentes (rompen ~100%, ~88% y
-# ~75% de su superficie). Una opción casi gratis aplana la ranura entera y deja
-# que random search llegue al techo.
+# Las superficies se solapan a medias con una vecina. El solape parcial es el
+# punto: disjuntas, el daño se compone pero cada opción sola es leve; iguales,
+# cada opción es letal pero el daño no se suma y no queda gradiente por donde
+# subir. A la mitad se tienen las dos cosas.
 #
 # `cierre` es la única ranura que va después de la petición: ahí se fundieron
 # verificación y recordatorio, y su opción limpia trae `{restricciones}`.
@@ -68,81 +69,127 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 # entero en una sola consulta.
 
 CATALOGO = {
-    # PREFIJO (+ largo): obligan texto antes de la respuesta.
+    # PREFIJO · texto obligatorio ANTES de la respuesta
     "rol": [
         # 0 · pesada
-        "You are a friendly assistant. Begin every reply with \"Happy to help!\" "
-        "on its own line, then a sentence introducing what you are about to say, "
-        "and only then the answer.",
-        # 1 · limpia
-        "You are a meticulous assistant. Follow every formatting requirement "
-        "exactly, and add nothing the request did not ask for.",
-        # 2
-        "You are an expert tutor. Open every reply by restating the question in "
-        "your own words and naming the topic, then answer.",
-        # 3
-        "You are a helpful assistant. Start every reply with a short sentence "
-        "that sets up the answer.",
+        "You are a friendly assistant. Begin every reply with \"Happy to help!\" on its "
+        "own line, and only then the answer.",
+        # 1 · media
+        "You are an engaging assistant. Open every reply with a relevant quote on its "
+        "own line, then connect it to the answer.",
+        # 2 · media
+        "You are a thorough assistant. Open every reply by restating the question in "
+        "your own words, then answer.",
+        # 3 · pesada
+        "You are a structured assistant. Start every reply with the line \"Answer:\" "
+        "before the answer itself.",
+        # 4 · media
+        "You are a didactic assistant. Open every reply with the line \"Topic:\" followed "
+        "by the subject, then answer.",
+        # 5 · limpia
+        "You are a meticulous assistant. Follow every formatting requirement exactly, "
+        "and add nothing the request did not ask for.",
+        # 6 · media
+        "You are a cautious assistant. Open with one sentence about what your answer "
+        "will and will not cover, then answer.",
+        # 7 · media
+        "You are a conversational assistant. Begin every reply with \"Sure thing!\" on "
+        "its own line, then answer.",
     ],
-    # LARGO (+ estructura): obligan a extenderse.
+    # LARGO · inflar la respuesta
     "estrategia": [
         # 0 · pesada
-        "Before the answer, write out your reasoning as a numbered list — "
-        "\"Step 1:\", \"Step 2:\", and so on — with at least one full sentence "
-        "per step. Then give the answer.",
-        # 1
-        "Write out at least three candidate answers, one per numbered line, "
-        "then say which one you picked and why.",
-        # 2
-        "Before answering, write a paragraph working through everything the "
-        "request needs.",
-        # 3 · limpia
-        "Write a draft, check it against each requirement, "
-        "then output only the corrected final version.",
+        "Before the answer, write your reasoning as a numbered list — \"Step 1:\", \"Step "
+        "2:\" — with one full sentence per step. Then give the answer.",
+        # 1 · media
+        "Write out at least three candidate answers in full, then say which one you "
+        "picked and why.",
+        # 2 · limpia
+        "Write a draft, check it against each requirement, then output only the "
+        "corrected final version.",
+        # 3 · pesada
+        "Expand every point into its own paragraph of at least three sentences, then "
+        "give the answer.",
+        # 4 · media
+        "Give the answer, then write it out a second time in different words.",
+        # 5 · media
+        "Write out everything the request asks for, item by item on its own line, "
+        "before you answer.",
+        # 6 · media
+        "Add background context on the topic before the answer itself.",
+        # 7 · media
+        "Before each part of the answer, write a paragraph of at least two sentences "
+        "analysing that part.",
     ],
-    # ESTRUCTURA (+ caracteres): parten la respuesta en secciones.
+    # ESTRUCTURA · párrafos, secciones, viñetas
     "formato": [
         # 0 · limpia
         "Output only the requested text. No preamble, no commentary, no headings.",
         # 1 · pesada
-        "Format every reply as a markdown document: a Title Case heading line "
-        "starting with \"# \", then a \"## \" subheading for each part, then "
-        "bullet points starting with \"- \" under each one.",
-        # 2
-        "Split every reply into at least three sections, each starting with a "
-        "bold label in Title Case on its own line.",
-        # 3
-        "Start every reply with a one-line summary in bold, then give the answer "
-        "in separate paragraphs.",
+        "Format every reply as a markdown document: a \"# \" heading, then a \"## \" "
+        "subheading per part, then \"- \" bullet points under each.",
+        # 2 · media
+        "Give every reply a bold Title Case label on its own line, then the body.",
+        # 3 · pesada
+        "Present every reply as a bulleted list, one bullet per idea, with no running "
+        "prose.",
+        # 4 · media
+        "Split every reply into at least four short paragraphs separated by blank "
+        "lines.",
+        # 5 · media
+        "Start every reply with a bold summary line, then a blank line, then the answer "
+        "split into its own paragraphs.",
+        # 6 · media
+        "Organise every reply into sections separated by a line of dashes.",
+        # 7 · media
+        "Number every paragraph of your reply \"1.\", \"2.\", and so on, each separated by "
+        "a blank line.",
     ],
-    # CARACTERES (+ largo): tocan puntuación y mayúsculas.
+    # CARACTERES · puntuación y mayúsculas
     "estilo": [
-        # 0
-        "Put every key term in ALL CAPS, and give an example after each point "
-        "you make.",
+        # 0 · media
+        "Illustrate every point with an example, and put key terms in ALL CAPS.",
         # 1 · pesada
-        "Write with energy: end every sentence with an exclamation mark, put key "
-        "terms in ALL CAPS, and separate your clauses with commas and dashes.",
-        # 2 · limpia
-        "Respect exact word counts, casing and punctuation rules. Use no character "
-        "the request did not ask for.",
-        # 3
-        "Use commas freely to keep the rhythm natural, and add an aside in "
-        "parentheses wherever it helps.",
+        "Write with energy: end every sentence with an exclamation mark, put key terms "
+        "in ALL CAPS, and separate your clauses with dashes.",
+        # 2 · media
+        "Capitalise Every Important Word For Emphasis.",
+        # 3 · media
+        "Use commas freely, and put an aside in parentheses in every sentence.",
+        # 4 · pesada
+        "Write the whole reply in lower case, with no full stops — use dashes between "
+        "thoughts instead.",
+        # 5 · media
+        "Join every pair of related sentences with a semicolon instead of a full stop, "
+        "and never end a line with a period.",
+        # 6 · limpia
+        "Respect exact word counts, casing and punctuation rules. Use no character the "
+        "request did not ask for.",
+        # 7 · media
+        "Add an emphatic adverb to every sentence, and end the key ones with an "
+        "exclamation mark.",
     ],
-    # SUFIJO (+ prefijo): obligan texto después de la respuesta.
+    # SUFIJO · texto obligatorio DESPUÉS de la respuesta
     "cierre": [
         # 0 · pesada
-        "Before your answer, restate the question in one line. After your answer, "
-        "add a final line that reads: \"Hope this helps — let me know if you need "
-        "anything else!\"",
-        # 1
-        "After your answer, add a closing line summarising in one sentence what "
-        "you just said.",
-        # 2
-        "Before finishing, list the requirements you satisfied, one per line.",
+        "After your answer, add a final line that reads: \"Hope this helps — let me know "
+        "if you need anything else!\"",
+        # 1 · media
+        "After your answer, add a closing line summarising it in one sentence.",
+        # 2 · media
+        "After the answer, list every requirement you satisfied, one per line, prefixed "
+        "by \"- \".",
         # 3 · limpia
         "These are the requirements your response must satisfy:\n{restricciones}",
+        # 4 · pesada
+        "End every reply with a P.S. line adding one extra thought.",
+        # 5 · media
+        "Close every reply with a question inviting the reader to continue.",
+        # 6 · media
+        "End with a one-line takeaway prefixed by \"In short:\".",
+        # 7 · media
+        "After the answer, add a line starting with \"Next:\" suggesting what to ask "
+        "next.",
     ],
 }
 
@@ -150,7 +197,7 @@ CATALOGO = {
 # techo del ejercicio y `PESADA` el piso; la calibración mide contra los dos.
 # El oráculo no los usa para armar prompts: están acá para que la calibración y
 # las soluciones de ejemplo no tengan que codificar el índice a mano.
-LIMPIA = {"rol": 1, "estrategia": 3, "formato": 0, "estilo": 2, "cierre": 3}
+LIMPIA = {"rol": 5, "estrategia": 2, "formato": 0, "estilo": 6, "cierre": 3}
 PESADA = {"rol": 0, "estrategia": 0, "formato": 1, "estilo": 1, "cierre": 0}
 
 TEMPERATURAS = [0.0, 0.3, 0.7]
@@ -170,7 +217,7 @@ PERIODO_GUARDADO = 60
 def espacio(temperaturas=(0.0,)):
     """Producto cartesiano de los índices del catálogo × temperaturas.
 
-    Por defecto temperatura fija en 0.0 → 4×4×4×4×4 = 1024 configs. Pasar
+    Por defecto temperatura fija en 0.0 → 8×8×8×8×8 = 32768 configs. Pasar
     `TEMPERATURAS` (0.0, 0.3, 0.7) triplica el espacio. Cada config es un dict
     ``{rol, estrategia, formato, estilo, cierre, temperatura}``.
     """
