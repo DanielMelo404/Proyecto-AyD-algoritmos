@@ -18,6 +18,7 @@ from oraculo import armar
 
 MODELOS = {
     "qwen17b": "Qwen/Qwen3-1.7B",
+    "qwen17b4bit": "unsloth/Qwen3-1.7B-unsloth-bnb-4bit",
     # El repo por defecto de Ministral 3 es FP8: la T4 (sm_75) no lo soporta.
     "ministral3b": "mistralai/Ministral-3-3B-Instruct-2512-BF16",
     "llama3b": "unsloth/Llama-3.2-3B-Instruct",
