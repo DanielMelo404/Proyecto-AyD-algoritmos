@@ -37,79 +37,110 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 #  El catálogo de ranuras
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
-# Cada opción es un consejo de prompting plausible. Lo que cuesta puntos
-# es el efecto colateral, y cada opción dañina pega en **dos** grupos de
-# familias, no en uno: un saludo con ofrecimiento final rompe los finales y
-# además mete preámbulo, los encabezados rompen secciones y de paso la
-# puntuación, la puntuación rica rompe comas, puntos y mayúsculas. Como los
-# grupos se solapan poco, el daño de varias ranuras se compone y la
-# supervivencia cae como un producto: una config al azar queda cerca del
-# piso y solo una búsqueda que repare ranura por ranura llega al techo.
-# `cierre` es la única ranura que va después de la petición: ahí se
-# fundieron verificación y recordatorio, y su opción limpia trae
-# `{restricciones}`.
+#
+# Cada ranura ataca una **superficie** distinta de la respuesta, y las opciones
+# dañinas son directivas sobre la forma literal de la salida, no consejos de
+# tono: un 1.7B obedece «empezá con "Happy to help!"» y no obedece «sé cálido»,
+# porque la restricción explícita de la petición siempre le gana al estilo.
+#
+#   rol        → PREFIJO     texto obligatorio antes de la respuesta
+#   estrategia → LARGO       inflar la respuesta
+#   formato    → ESTRUCTURA  párrafos, secciones, viñetas
+#   estilo     → CARACTERES  puntuación y mayúsculas
+#   cierre     → SUFIJO      texto obligatorio después de la respuesta
+#
+# Cada superficie cubre ~50% del lote y se solapa a la mitad con una vecina.
+# El solape parcial es el punto: con superficies disjuntas el daño se compone
+# pero cada opción sola es leve y el sorteo encuentra configs buenas; con
+# superficies iguales cada opción es letal pero el daño no se suma y no queda
+# gradiente por donde subir. A la mitad se tienen las dos cosas — el piso cae
+# a ~1% y reparar una ranura a la vez sube de a escalones hasta el techo.
+#
+# Las tres opciones dañinas de cada ranura son potentes (rompen ~100%, ~88% y
+# ~75% de su superficie). Una opción casi gratis aplana la ranura entera y deja
+# que random search llegue al techo.
+#
+# `cierre` es la única ranura que va después de la petición: ahí se fundieron
+# verificación y recordatorio, y su opción limpia trae `{restricciones}`.
 #
 # La opción limpia **no** está en el mismo índice en todas las ranuras
 # (ver `LIMPIA`): si lo estuviera, notar el patrón valdría el ejercicio
 # entero en una sola consulta.
 
 CATALOGO = {
+    # PREFIJO (+ largo): obligan texto antes de la respuesta.
     "rol": [
-        # 0 · pesada: saludo + ofrecimiento final (cierre + preámbulo)
-        "You are a friendly assistant. Greet the user, keep the tone warm, "
-        "and close by offering more help.",
+        # 0 · pesada
+        "You are a friendly assistant. Begin every reply with \"Happy to help!\" "
+        "on its own line, then a sentence introducing what you are about to say, "
+        "and only then the answer.",
         # 1 · limpia
         "You are a meticulous assistant. Follow every formatting requirement "
         "exactly, and add nothing the request did not ask for.",
-        # 2 · media: introduce el tema antes de responder (preámbulo + léxico)
-        "You are an expert tutor. Introduce the topic, then explain the answer "
-        "so that a beginner can follow every step.",
-        # 3 · leve: expande para no dejar huecos
-        "You are a helpful assistant. Make sure the user leaves with the full "
-        "picture, not just the bare answer.",
+        # 2
+        "You are an expert tutor. Open every reply by restating the question in "
+        "your own words and naming the topic, then answer.",
+        # 3
+        "You are a helpful assistant. Start every reply with a short sentence "
+        "that sets up the answer.",
     ],
+    # LARGO (+ estructura): obligan a extenderse.
     "estrategia": [
-        # 0 · pesada: razonamiento visible y numerado (preámbulo + secciones)
-        "Explain your reasoning step by step, numbering each step, "
-        "before giving the answer.",
-        # 1 · media
-        "Consider several possible answers, lay them out, then pick the best one.",
-        # 2 · leve
-        "Think out loud about what the request needs, then answer.",
+        # 0 · pesada
+        "Before the answer, write out your reasoning as a numbered list — "
+        "\"Step 1:\", \"Step 2:\", and so on — with at least one full sentence "
+        "per step. Then give the answer.",
+        # 1
+        "Write out at least three candidate answers, one per numbered line, "
+        "then say which one you picked and why.",
+        # 2
+        "Before answering, write a paragraph working through everything the "
+        "request needs.",
         # 3 · limpia
         "Write a draft, check it against each requirement, "
         "then output only the corrected final version.",
     ],
+    # ESTRUCTURA (+ caracteres): parten la respuesta en secciones.
     "formato": [
         # 0 · limpia
         "Output only the requested text. No preamble, no commentary, no headings.",
-        # 1 · pesada: markdown completo (secciones + puntuación)
-        "Organize your answer with markdown headings, bullet points and a bold title.",
-        # 2 · media
-        "Use bold text and section labels to highlight the key ideas.",
-        # 3 · leve
-        "Start with a one-line summary of what you are about to say, then the answer.",
+        # 1 · pesada
+        "Format every reply as a markdown document: a Title Case heading line "
+        "starting with \"# \", then a \"## \" subheading for each part, then "
+        "bullet points starting with \"- \" under each one.",
+        # 2
+        "Split every reply into at least three sections, each starting with a "
+        "bold label in Title Case on its own line.",
+        # 3
+        "Start every reply with a one-line summary in bold, then give the answer "
+        "in separate paragraphs.",
     ],
+    # CARACTERES (+ largo): tocan puntuación y mayúsculas.
     "estilo": [
-        # 0 · media: sinónimos y ejemplos (léxico + largo)
-        "Illustrate every point with examples and synonyms so the meaning "
-        "is unmistakable.",
-        # 1 · pesada: puntuación rica + mayúsculas
-        "Write in a rich, descriptive style: vary the punctuation, use dashes, "
-        "exclamations and capitalised emphasis.",
+        # 0
+        "Put every key term in ALL CAPS, and give an example after each point "
+        "you make.",
+        # 1 · pesada
+        "Write with energy: end every sentence with an exclamation mark, put key "
+        "terms in ALL CAPS, and separate your clauses with commas and dashes.",
         # 2 · limpia
         "Respect exact word counts, casing and punctuation rules. Use no character "
         "the request did not ask for.",
-        # 3 · leve
-        "Keep the tone natural and conversational, the way you would say it out loud.",
+        # 3
+        "Use commas freely to keep the rhythm natural, and add an aside in "
+        "parentheses wherever it helps.",
     ],
+    # SUFIJO (+ prefijo): obligan texto después de la respuesta.
     "cierre": [
         # 0 · pesada
-        "Finish by asking whether the user needs anything else.",
-        # 1 · media
-        "End with a short summary of your answer and a closing remark.",
-        # 2 · leve: obliga a escribir después de haber respondido
-        "Before finishing, state which requirements you satisfied and how.",
+        "Before your answer, restate the question in one line. After your answer, "
+        "add a final line that reads: \"Hope this helps — let me know if you need "
+        "anything else!\"",
+        # 1
+        "After your answer, add a closing line summarising in one sentence what "
+        "you just said.",
+        # 2
+        "Before finishing, list the requirements you satisfied, one per line.",
         # 3 · limpia
         "These are the requirements your response must satisfy:\n{restricciones}",
     ],
