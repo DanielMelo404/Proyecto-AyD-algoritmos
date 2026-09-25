@@ -38,48 +38,89 @@ from open_instruct.IFEvalG import instructions_registry as _REG
 # ─────────────────────────────────────────────────────────────────────
 # En inglés: las instancias y las restricciones vienen en inglés.
 # Cada opción es un consejo de prompting plausible. Lo que cuesta puntos
-# es el efecto colateral, y cada uno pega en una sola familia: un cierre
-# amable rompe los finales, un preámbulo rompe «solo la respuesta» y los
-# límites de palabras, los encabezados rompen secciones y viñetas, la
-# puntuación rica rompe comas y mayúsculas. Como solo caen las instancias
-# que traen esa familia, la precisión baja de a poco y no se va a cero.
+# es el efecto colateral, y cada opción dañina pega en **dos** grupos de
+# familias, no en uno: un saludo con ofrecimiento final rompe los finales y
+# además mete preámbulo, los encabezados rompen secciones y de paso la
+# puntuación, la puntuación rica rompe comas, puntos y mayúsculas. Como los
+# grupos se solapan poco, el daño de varias ranuras se compone y la
+# supervivencia cae como un producto: una config al azar queda cerca del
+# piso y solo una búsqueda que repare ranura por ranura llega al techo.
 # `cierre` es la única ranura que va después de la petición: ahí se
-# fundieron verificación y recordatorio. Solo su última opción trae
+# fundieron verificación y recordatorio, y su opción limpia trae
 # `{restricciones}`.
+#
+# La opción limpia **no** está en el mismo índice en todas las ranuras
+# (ver `LIMPIA`): si lo estuviera, notar el patrón valdría el ejercicio
+# entero en una sola consulta.
 
 CATALOGO = {
     "rol": [
-        "You are a friendly assistant. Be warm and personable.",
-        "You are an expert tutor. Explain things so a beginner can follow.",
-        "You are a helpful assistant.",
-        "You are a meticulous assistant who follows formatting requirements exactly.",
+        # 0 · pesada: saludo + ofrecimiento final (cierre + preámbulo)
+        "You are a friendly assistant. Greet the user, keep the tone warm, "
+        "and close by offering more help.",
+        # 1 · limpia
+        "You are a meticulous assistant. Follow every formatting requirement "
+        "exactly, and add nothing the request did not ask for.",
+        # 2 · media: introduce el tema antes de responder (preámbulo + léxico)
+        "You are an expert tutor. Introduce the topic, then explain the answer "
+        "so that a beginner can follow every step.",
+        # 3 · leve: expande para no dejar huecos
+        "You are a helpful assistant. Make sure the user leaves with the full "
+        "picture, not just the bare answer.",
     ],
     "estrategia": [
-        "Explain your reasoning step by step before giving the answer.",
-        "Consider several possible answers, then pick the best one.",
-        "Think about the requirements before you answer.",
+        # 0 · pesada: razonamiento visible y numerado (preámbulo + secciones)
+        "Explain your reasoning step by step, numbering each step, "
+        "before giving the answer.",
+        # 1 · media
+        "Consider several possible answers, lay them out, then pick the best one.",
+        # 2 · leve
+        "Think out loud about what the request needs, then answer.",
+        # 3 · limpia
         "Write a draft, check it against each requirement, "
         "then output only the corrected final version.",
     ],
     "formato": [
-        "Organize your answer with markdown headings and bullet points.",
-        "Use bold text to highlight the key ideas.",
-        "Start with a one-line summary of what you are about to say.",
-        "Output only the requested text. Do not add explanations, preambles or commentary.",
+        # 0 · limpia
+        "Output only the requested text. No preamble, no commentary, no headings.",
+        # 1 · pesada: markdown completo (secciones + puntuación)
+        "Organize your answer with markdown headings, bullet points and a bold title.",
+        # 2 · media
+        "Use bold text and section labels to highlight the key ideas.",
+        # 3 · leve
+        "Start with a one-line summary of what you are about to say, then the answer.",
     ],
     "estilo": [
-        "Write in a rich, descriptive style with varied punctuation.",
-        "Use plenty of examples to illustrate the answer.",
-        "Keep the tone natural and conversational.",
-        "Respect exact word counts, casing and punctuation rules.",
+        # 0 · media: sinónimos y ejemplos (léxico + largo)
+        "Illustrate every point with examples and synonyms so the meaning "
+        "is unmistakable.",
+        # 1 · pesada: puntuación rica + mayúsculas
+        "Write in a rich, descriptive style: vary the punctuation, use dashes, "
+        "exclamations and capitalised emphasis.",
+        # 2 · limpia
+        "Respect exact word counts, casing and punctuation rules. Use no character "
+        "the request did not ask for.",
+        # 3 · leve
+        "Keep the tone natural and conversational, the way you would say it out loud.",
     ],
     "cierre": [
+        # 0 · pesada
         "Finish by asking whether the user needs anything else.",
-        "End with a short summary of your answer.",
-        "Before finishing, verify that your answer satisfies every requirement.",
+        # 1 · media
+        "End with a short summary of your answer and a closing remark.",
+        # 2 · leve: obliga a escribir después de haber respondido
+        "Before finishing, state which requirements you satisfied and how.",
+        # 3 · limpia
         "These are the requirements your response must satisfy:\n{restricciones}",
     ],
 }
+
+# Índice de la opción limpia y de la más dañina de cada ranura. `LIMPIA` es el
+# techo del ejercicio y `PESADA` el piso; la calibración mide contra los dos.
+# El oráculo no los usa para armar prompts: están acá para que la calibración y
+# las soluciones de ejemplo no tengan que codificar el índice a mano.
+LIMPIA = {"rol": 1, "estrategia": 3, "formato": 0, "estilo": 2, "cierre": 3}
+PESADA = {"rol": 0, "estrategia": 0, "formato": 1, "estilo": 1, "cierre": 0}
 
 TEMPERATURAS = [0.0, 0.3, 0.7]
 

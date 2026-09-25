@@ -30,7 +30,9 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay 1024 configuraciones (`espacio()`, temperatura 0.0): un índice por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook está fijo en 40 instancias. Medir con cuántas instancias buscar es parte del problema.
+Hay 1024 configuraciones (`espacio()`, temperatura 0.0): un índice por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook está fijo en 100 instancias. Medir con cuántas instancias buscar es parte del problema.
+
+**Es un problema de optimización de verdad.** Los efectos colaterales de las opciones se componen: una configuración al azar se queda cerca del **1%**, y el techo está cerca del **30%**. Sortear configuraciones no alcanza — con 60 consultas, la búsqueda aleatoria se estanca alrededor del 15%. Para pasar de ahí hay que usar la estructura: leer las trazas, ver qué familia rompe cada opción, y buscar con eso (backtracking con poda, ascenso por coordenadas, haz, recocido). Reparar una ranura a la vez sube de a escalones; ninguna opción buena está en el mismo índice en todas las ranuras.
 
 ## Modelos
 
@@ -95,7 +97,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 3, "estrategia": 3, "formato": 3, "estilo": 3, "cierre": 3, "temperatura": 0.0},
+ "config": {"rol": 2, "estrategia": 1, "formato": 3, "estilo": 0, "cierre": 2, "temperatura": 0.0},
  "semana": 3
 }
 ```
@@ -113,7 +115,11 @@ restricciones que no están ahí. Los archivos están en `profesor/`:
 | `profesor/calificar.py` | `calificar` y `calificar_entregas` |
 | `profesor/datos_test.json` | Las 294 instancias del test |
 
-`calibracion.ipynb` (raíz del repo) se corre una vez en Colab, con `qwen17b`, antes de soltar el catálogo: barrido por ranura, piso, techo y ascenso por coordenadas.
+`calibracion.ipynb` (raíz del repo) se corre una vez en Colab, con `qwen17b`, antes de soltar
+el catálogo: barrido por ranura, piso, techo, daño medido por opción, el paisaje de las 1024
+configs predicho a partir de ese daño, y ascenso por coordenadas. Termina con una tabla de
+veredictos contra los objetivos de diseño — si random search pasa de 15% con 60 consultas, el
+catálogo hay que endurecerlo antes de soltarlo.
 
 `datos_ocultos.json` y los scripts de preparación no entran a git.
 
