@@ -12,8 +12,9 @@ para armarlo: bajar el modelo, leer el JSON visible y partir búsqueda/validaci�
 """
 
 import json
+from collections import Counter
 
-from oraculo import armar
+from oraculo import armar, RANURAS
 
 
 MODELOS = {
@@ -170,6 +171,148 @@ def dividir(datos):
     if descartadas:
         print(f"({descartadas} instancias descartadas: no medían nada — ver `dividir`)")
     return busqueda, validacion
+
+
+class Registro:
+    """Anota cada consulta al oráculo y dice qué está midiendo la búsqueda.
+
+    Guardar solo la mejor precisión esconde lo que hace falta para mejorar una
+    heurística: si una ranura no está haciendo nada, si el lote tiene
+    instancias que nadie resuelve (o que resuelve cualquiera), y qué
+    restricción se está cayendo siempre.
+
+        reg = Registro(INSTANCIAS)
+        for ...:
+            r = oraculo.evaluar(config, INSTANCIAS, semilla=1)
+            print(reg.anotar(config, r))
+        reg.resumen()
+    """
+
+    # Por debajo de esto, la ranura no separa sus opciones: el texto no pega.
+    RANGO_MUERTO = 0.02
+    # Con menos muestras por opción el rango es ruido y no se avisa nada.
+    MUESTRA_MINIMA = 3
+
+    def __init__(self, instancias, total=None):
+        self.instancias = list(instancias)
+        self.total = total
+        self.filas = []  # (config, precision, ids que fallaron, familias violadas)
+        self.aciertos = {x["id"]: 0 for x in self.instancias}
+        self.mejor = None
+
+    # ---- durante la búsqueda -----------------------------------------
+
+    def anotar(self, config, resultado):
+        """Guarda una evaluación y devuelve la línea para imprimir."""
+        fallaron = {t["id"] for t in resultado.trazas}
+        familias = Counter(t["violo"] for t in resultado.trazas if t.get("violo"))
+        self.filas.append((dict(config), resultado.precision, fallaron, familias))
+        for x in self.instancias:
+            if x["id"] not in fallaron:
+                self.aciertos[x["id"]] += 1
+
+        nueva = self.mejor is None or resultado.precision > self.mejor[0]
+        if nueva:
+            self.mejor = (resultado.precision, dict(config))
+
+        n = len(self.filas)
+        cuantas = f"{n:3d}/{self.total}" if self.total else f"{n:3d}"
+        peor = familias.most_common(1)
+        return (
+            f"eval {cuantas}  {self._indices(config)}  "
+            f"esta {resultado.precision:5.1%}  mejor {self.mejor[0]:5.1%}"
+            + ("  ← nueva mejor" if nueva else "")
+            + (f"   cae: {peor[0][0]} ×{peor[0][1]}" if peor else "")
+        )
+
+    @staticmethod
+    def _indices(config):
+        """La config como una cadena corta: un dígito por ranura, más la temp."""
+        s = "".join(str(config.get(r, "-")) for r in RANURAS)
+        t = config.get("temperatura")
+        return f"[{s}]" + (f"@{t}" if t else "")
+
+    # ---- después de la búsqueda --------------------------------------
+
+    def resumen(self, top=6):
+        """Imprime el panel de diagnóstico completo."""
+        if not self.filas:
+            print("sin evaluaciones registradas")
+            return
+        self._puntajes()
+        self._por_ranura()
+        self._instancias(top)
+        self._familias(top)
+
+    def _puntajes(self):
+        ps = sorted(p for _, p, _, _ in self.filas)
+        n = len(ps)
+        q = lambda f: ps[min(n - 1, int(f * n))]
+        print(f"=== {n} evaluaciones ===")
+        print(
+            f"  peor {ps[0]:5.1%}   p25 {q(0.25):5.1%}   mediana {q(0.5):5.1%}   "
+            f"p75 {q(0.75):5.1%}   mejor {ps[-1]:5.1%}"
+        )
+        print(f"  mejor config: {self._indices(self.mejor[1])}  {self.mejor[1]}")
+
+    def _por_ranura(self):
+        """Puntaje medio de las configs que llevan cada opción.
+
+        Una ranura cuyo mejor y peor opción sacan casi lo mismo no está
+        separando nada: su texto no le hace efecto al modelo, y la búsqueda
+        gasta consultas en una dimensión que no informa.
+        """
+        print("\n=== por ranura (media de las configs que llevan cada opción) ===")
+        for ranura in RANURAS:
+            medias = {}
+            for config, p, _, _ in self.filas:
+                if ranura in config:
+                    medias.setdefault(config[ranura], []).append(p)
+            if len(medias) < 2:
+                print(f"  {ranura:11} — solo se probó una opción")
+                continue
+            prom = {i: sum(v) / len(v) for i, v in medias.items()}
+            mejor_i = max(prom, key=prom.get)
+            rango = max(prom.values()) - min(prom.values())
+            detalle = "  ".join(
+                f"[{i}]{prom[i]:.0%}×{len(medias[i])}" + ("*" if i == mejor_i else "")
+                for i in sorted(prom)
+            )
+            flojo = min(len(v) for v in medias.values()) < self.MUESTRA_MINIMA
+            if flojo:
+                aviso = "   (muestra corta: el rango puede ser ruido)"
+            elif rango < self.RANGO_MUERTO:
+                aviso = "   ⚠ SIN EFECTO: esta ranura no separa nada"
+            else:
+                aviso = ""
+            print(f"  {ranura:11} rango {rango:5.1%}{aviso}")
+            print(f"              {detalle}")
+        print("  (* = mejor media;  ×n = cuántas veces se probó)")
+        print(
+            "  Para leer el rango hace falta probar cada opción varias veces con las\n"
+            "  otras ranuras FIJAS. Al azar cada opción sale 1-2 veces y el rango es\n"
+            "  ruido; un barrido por ranura (celda 4 de calibracion.ipynb) sí lo mide."
+        )
+
+    def _instancias(self, top):
+        """Instancias que no informan: nadie las resuelve, o las resuelve cualquiera."""
+        nunca = [i for i, n in self.aciertos.items() if n == 0]
+        siempre = [i for i, n in self.aciertos.items() if n == len(self.filas)]
+        n = len(self.instancias)
+        print(f"\n=== lote de {n} instancias ===")
+        print(f"  nunca resueltas:   {len(nunca):3}  ({len(nunca)/n:.0%}) — no separan configs")
+        print(f"  siempre resueltas: {len(siempre):3}  ({len(siempre)/n:.0%}) — puntos regalados")
+        print(f"  informativas:      {n - len(nunca) - len(siempre):3}")
+        if nunca[:top]:
+            print(f"  ejemplos nunca resueltas: {', '.join(map(str, nunca[:top]))}")
+
+    def _familias(self, top):
+        total = Counter()
+        for _, _, _, fam in self.filas:
+            total += fam
+        print("\n=== restricciones que más se cayeron (sobre todas las evaluaciones) ===")
+        for familia, veces in total.most_common(top):
+            print(f"  {veces:5}  {familia}")
 
 
 def ver_prompt(config, instancia):
