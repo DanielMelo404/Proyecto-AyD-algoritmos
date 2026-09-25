@@ -30,9 +30,33 @@ r.precision        # 0.55
 r.trazas           # [{id, violo, salida}, ...]
 ```
 
-Hay **32 768** configuraciones (`espacio()`, temperatura 0.0): un índice de 0 a 7 por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook son las 100 instancias de `busqueda`. Medir con cuántas instancias buscar es parte del problema.
+Hay **3 125** configuraciones (`espacio()`, temperatura 0.0): un índice de 0 a 4 por ranura entre `rol`, `estrategia`, `formato`, `estilo` y `cierre`, más la temperatura. Cada ranura es un consejo de prompting; algunos combinan mal con las restricciones que mide el verificador, y las trazas dicen cuál falló. El lote de búsqueda del notebook son las 100 instancias de `busqueda`. Medir con cuántas instancias buscar es parte del problema.
 
-**Es un problema de optimización de verdad.** Cada ranura ataca una parte distinta de la respuesta —el prefijo, el largo, la estructura, los caracteres, el sufijo— y los efectos se componen. Una configuración al azar se queda **debajo del 5%**; el techo está cerca del **24%**. Sortear no alcanza: hay **una sola opción limpia entre ocho** en cada ranura, así que acertar cuatro de cinco ranuras al azar pasa 1 vez cada 900. El notebook trae `MAX_EVALS = 15`: con ese presupuesto el sorteo no pasa del 10%. Para pasar de ahí hay que usar la estructura — leer las trazas, ver qué familia rompe cada opción, y buscar con eso (backtracking con poda, ascenso por coordenadas, haz, recocido). Reparar una ranura a la vez sube de a escalones; ninguna opción buena está en el mismo índice en todas las ranuras.
+**Es un problema de optimización de verdad.** Cada ranura ataca una parte distinta de la respuesta, y las cinco superficies de daño tienen **tamaños muy desiguales**:
+
+| ranura | qué fuerza su texto | lote en riesgo |
+|---|---|---|
+| `formato` | secciones, viñetas y la intro que arrastran | ~56% |
+| `cierre` | texto antes **y** después de la respuesta | ~53% |
+| `estilo` | puntuación y mayúsculas | ~41% |
+| `estrategia` | inflar la respuesta | ~34% |
+| `rol` | un prefijo obligatorio | ~25% |
+
+Esa desigualdad es el punto. Con superficies parejas, una ranura mal no puede costar más de 1/5 del techo y el sorteo aterriza cerca del óptimo. Desiguales, **hay un orden que descubrir**: arreglar `formato` vale el doble que arreglar `rol`. Una búsqueda que lea las trazas y priorice gana mucho; una que sortee no puede aprovechar nada.
+
+Una configuración al azar saca **0–3%** (mediana 2%); el techo está cerca del **24%** sobre el lote de búsqueda. Reparando de la superficie más grande a la más chica la escalera es `0% → 4% → 8% → 13% → 24% → techo`, con pasos de 4–11 puntos, todos medibles con 100 instancias.
+
+Con el mismo presupuesto de 60 consultas, sobre el paisaje simulado:
+
+| método | resultado |
+|---|---|
+| búsqueda aleatoria | 15% |
+| haz (ancho 2) | 19% |
+| recocido simulado | 22% |
+| ascenso por coordenadas | 32% |
+| heurística guiada por trazas | 32% |
+
+**Todos los métodos informados le ganan al sorteo.** Con menos de ~60 consultas el haz y el recocido no alcanzan a completar una generación y quedan por debajo: elegir un método que quepa en el presupuesto es parte del problema.
 
 Las particiones vienen **curadas**. `datos_visibles.json` marca como `descartada` a la instancia que pide más texto del que cabe en `max_new_tokens`, a la que ninguna opción puede romper, y a las de una o de cuatro-cinco restricciones. Las primeras son imposibles de acertar; las segundas son puntos que nadie puede perder, y con un tercio del lote así el puntaje casi no dependía de la configuración elegida. Búsqueda y validación quedan con la misma dificultad (2.5 restricciones por instancia), para que validar mida generalización y no un lote más duro.
 
@@ -99,7 +123,7 @@ Un `entrega.json` con grupo, configuración y semana:
 ```json
 {
  "grupo": "G07",
- "config": {"rol": 2, "estrategia": 7, "formato": 4, "estilo": 1, "cierre": 6, "temperatura": 0.0},
+ "config": {"rol": 3, "estrategia": 1, "formato": 2, "estilo": 0, "cierre": 4, "temperatura": 0.0},
  "semana": 3
 }
 ```
